@@ -13,14 +13,18 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
-function extractMessage(err: unknown): string {
+function toMsg(err: unknown): string {
   if (!err) return 'Erreur inconnue'
-  if (typeof err === 'string') return err
-  if (typeof err === 'object') {
+  if (typeof err === 'string' && err.length > 0) return err
+  if (err instanceof Error) return err.message
+  try {
     const e = err as any
-    return e.message || e.error_description || e.msg || JSON.stringify(e)
-  }
-  return String(err)
+    const candidates = [e.message, e.error_description, e.msg, e.error, e.status_description]
+    for (const c of candidates) { if (c && typeof c === 'string' && c.length > 0) return c }
+    const s = JSON.stringify(e)
+    if (s !== '{}' && s !== 'null') return s
+    return 'Erreur serveur. Vérifiez la console (F12).'
+  } catch { return 'Erreur inconnue' }
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
@@ -58,31 +62,25 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signIn = async (email: string, password: string) => {
     try {
       const { error } = await supabase.auth.signInWithPassword({ email, password })
-      if (error) return { error: extractMessage(error) }
+      if (error) { console.error('[signIn]', error); return { error: toMsg(error) } }
       return { error: null }
-    } catch (e) {
-      return { error: extractMessage(e) }
-    }
+    } catch (e) { console.error('[signIn catch]', e); return { error: toMsg(e) } }
   }
 
   const signUp = async (email: string, password: string, orgName: string) => {
     try {
-      if (password.length < 6) return { error: 'Mot de passe : 6 caractères minimum' }
       const { data, error } = await supabase.auth.signUp({
         email,
         password,
         options: { data: { org_name: orgName.trim() || 'Mon Cabinet' } },
       })
-      if (error) return { error: extractMessage(error) }
-      // Supabase renvoie user même si email non confirmé
-      if (data.user && data.user.identities && data.user.identities.length === 0) {
-        return { error: 'Cet email est déjà utilisé.' }
-      }
-      if (!data.user) return { error: 'Erreur lors de la création du compte.' }
+      console.log('[signUp data]', JSON.stringify(data))
+      console.log('[signUp error]', JSON.stringify(error))
+      if (error) return { error: toMsg(error) }
+      if (!data?.user) return { error: 'Compte non créé — réessayez.' }
+      if (data.user.identities?.length === 0) return { error: 'Email déjà utilisé.' }
       return { error: null }
-    } catch (e) {
-      return { error: extractMessage(e) }
-    }
+    } catch (e) { console.error('[signUp catch]', e); return { error: toMsg(e) } }
   }
 
   const signOut = async () => { await supabase.auth.signOut(); setOrg(null) }

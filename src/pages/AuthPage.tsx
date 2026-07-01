@@ -25,6 +25,7 @@ export default function AuthPage() {
       if (!orgName.trim()) { setError('Saisissez le nom du cabinet.'); setLoading(false); return }
       if (password.length < 6) { setError('Mot de passe : 6 caractères minimum.'); setLoading(false); return }
       const { error: err } = await signUp(email, password, orgName)
+      console.error('[signUp error raw]', err)
       if (err) { setError(err); setLoading(false); return }
       // Tentative de connexion auto après inscription
       const { error: loginErr } = await signIn(email, password)
