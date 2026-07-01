@@ -13,6 +13,16 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+function extractMessage(err: unknown): string {
+  if (!err) return 'Erreur inconnue'
+  if (typeof err === 'string') return err
+  if (typeof err === 'object') {
+    const e = err as any
+    return e.message || e.error_description || e.msg || JSON.stringify(e)
+  }
+  return String(err)
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null)
   const [session, setSession] = useState<Session | null>(null)
@@ -40,27 +50,39 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const { data: listener } = supabase.auth.onAuthStateChange((_, session) => {
       setSession(session); setUser(session?.user ?? null)
       if (session?.user) fetchOrg(session.user.id)
-      else { setOrg(null) }
+      else setOrg(null)
     })
     return () => listener.subscription.unsubscribe()
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) return { error: error.message }
-    return { error: null }
+    try {
+      const { error } = await supabase.auth.signInWithPassword({ email, password })
+      if (error) return { error: extractMessage(error) }
+      return { error: null }
+    } catch (e) {
+      return { error: extractMessage(e) }
+    }
   }
 
   const signUp = async (email: string, password: string, orgName: string) => {
-    // Inscription native Supabase (pas de Edge Function)
-    const { data, error } = await supabase.auth.signUp({
-      email, password,
-      options: { data: { org_name: orgName } }
-    })
-    if (error) return { error: error.message }
-    if (!data.user) return { error: 'Erreur création compte' }
-    // Le trigger SQL crée automatiquement organization + profile
-    return { error: null }
+    try {
+      if (password.length < 6) return { error: 'Mot de passe : 6 caractères minimum' }
+      const { data, error } = await supabase.auth.signUp({
+        email,
+        password,
+        options: { data: { org_name: orgName.trim() || 'Mon Cabinet' } },
+      })
+      if (error) return { error: extractMessage(error) }
+      // Supabase renvoie user même si email non confirmé
+      if (data.user && data.user.identities && data.user.identities.length === 0) {
+        return { error: 'Cet email est déjà utilisé.' }
+      }
+      if (!data.user) return { error: 'Erreur lors de la création du compte.' }
+      return { error: null }
+    } catch (e) {
+      return { error: extractMessage(e) }
+    }
   }
 
   const signOut = async () => { await supabase.auth.signOut(); setOrg(null) }
