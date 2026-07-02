@@ -10,18 +10,18 @@
 @layer components {
   /* Buttons */
   .btn { @apply inline-flex items-center justify-center gap-2 rounded-xl px-4 py-2.5 text-sm font-semibold transition-all duration-200 disabled:opacity-40 disabled:cursor-not-allowed select-none; }
-  .btn-primary { @apply btn bg-gradient-to-br from-primary-500 to-primary-700 text-white hover:from-primary-600 hover:to-primary-800 active:scale-[0.97] shadow-glow-sm hover:shadow-glow-primary; }
+  .btn-primary { @apply btn bg-gradient-to-br from-primary-500 to-primary-700 text-white hover:from-primary-600 hover:to-primary-800 active:scale-[0.97]; }
   .btn-secondary { @apply btn bg-white text-slate-700 border border-slate-200 hover:border-primary-300 hover:text-primary-700 hover:bg-primary-50 active:scale-[0.97] shadow-sm; }
   .btn-danger { @apply btn bg-gradient-to-br from-red-500 to-red-700 text-white hover:from-red-600 hover:to-red-800 active:scale-[0.97] shadow-sm; }
   .btn-ghost { @apply btn text-slate-500 hover:bg-slate-100 hover:text-slate-700; }
   .btn-icon { @apply p-2 rounded-xl transition-all duration-200 hover:scale-110 active:scale-95; }
-  /* Inputs */
-  .input { @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-primary-400 focus:outline-none focus:ring-3 focus:ring-primary-500/20 transition-all duration-200 hover:border-slate-300; }
+  /* Inputs — ring-2 remplace ring-3 (inexistant en Tailwind v3) */
+  .input { @apply w-full rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-900 placeholder-slate-400 focus:border-primary-400 focus:outline-none focus:ring-2 focus:ring-primary-500/20 transition-all duration-200 hover:border-slate-300; }
   .label { @apply block text-xs font-semibold text-slate-500 mb-1.5 uppercase tracking-wide; }
   /* Cards */
-  .card { @apply bg-white rounded-2xl border border-slate-100 shadow-card; }
-  .card-hover { @apply card hover:shadow-card-hover hover:-translate-y-0.5 transition-all duration-300 cursor-pointer; }
-  .card-glass { @apply bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60 shadow-card; }
+  .card { @apply bg-white rounded-2xl border border-slate-100; box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 8px 24px rgba(0,0,0,0.06); }
+  .card-hover { @apply card hover:-translate-y-0.5 transition-all duration-300 cursor-pointer; }
+  .card-glass { @apply bg-white/80 backdrop-blur-sm rounded-2xl border border-white/60; box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 8px 24px rgba(0,0,0,0.06); }
   /* Badges */
   .badge { @apply inline-flex items-center rounded-full px-2.5 py-1 text-xs font-semibold; }
   .badge-success { @apply badge bg-emerald-100 text-emerald-700 ring-1 ring-emerald-200; }
@@ -33,30 +33,34 @@
   .stat-card { @apply card p-6 relative overflow-hidden; }
   /* Modal */
   .modal-overlay { @apply fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-50 flex items-center justify-center p-4; }
-  .modal { @apply bg-white rounded-2xl shadow-modal w-full animate-scale-in; }
+  .modal { @apply bg-white rounded-2xl w-full; box-shadow: 0 24px 60px rgba(0,0,0,0.25); animation: scaleIn 0.2s ease-out; }
   /* Toast */
-  .toast { @apply fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-5 py-4 rounded-2xl shadow-modal text-sm font-medium animate-slide-up; }
+  .toast { @apply fixed bottom-6 right-6 z-[100] flex items-center gap-3 px-5 py-4 rounded-2xl text-sm font-medium; box-shadow: 0 24px 60px rgba(0,0,0,0.25); animation: slideUp 0.4s cubic-bezier(0.16,1,0.3,1); }
   .toast-success { @apply toast bg-emerald-600 text-white; }
   .toast-error { @apply toast bg-red-600 text-white; }
   .toast-info { @apply toast bg-primary-600 text-white; }
+  .toast-warning { @apply toast bg-amber-500 text-white; }
   /* Table */
-  .table-row { @apply border-b border-slate-50 hover:bg-gradient-to-r hover:from-primary-50/30 hover:to-transparent transition-all duration-200; }
+  .table-row { @apply border-b border-slate-50 hover:bg-primary-50/30 transition-all duration-200; }
   /* Nav */
   .nav-item { @apply flex items-center gap-3 px-3 py-2.5 rounded-xl text-sm font-medium transition-all duration-200; }
   .nav-item-active { @apply nav-item bg-white/15 text-white shadow-sm; }
   .nav-item-inactive { @apply nav-item text-slate-300 hover:bg-white/10 hover:text-white; }
   /* Shimmer */
-  .shimmer { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; @apply animate-shimmer; }
-  /* Section header */
+  .shimmer { background: linear-gradient(90deg, #f0f0f0 25%, #e0e0e0 50%, #f0f0f0 75%); background-size: 200% 100%; animation: shimmer 1.5s infinite; }
+  /* Section */
   .section-title { @apply text-xl font-bold text-slate-900 tracking-tight; }
   .section-sub { @apply text-sm text-slate-500 mt-0.5; }
+  /* Hover card shadow utilitaire */
+  .hover-card { @apply transition-all duration-300; }
+  .hover-card:hover { box-shadow: 0 4px 6px rgba(0,0,0,0.04), 0 16px 40px rgba(0,0,0,0.10); transform: translateY(-2px); }
 }
 
 /* Scrollbar */
 ::-webkit-scrollbar { width: 6px; height: 6px; }
-::-webkit-scrollbar-track { @apply bg-transparent; }
-::-webkit-scrollbar-thumb { @apply bg-slate-300 rounded-full; }
-::-webkit-scrollbar-thumb:hover { @apply bg-primary-400; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 9999px; }
+::-webkit-scrollbar-thumb:hover { background: #818cf8; }
 
 /* Animations */
 .page-enter { animation: fadeIn 0.35s cubic-bezier(0.16, 1, 0.3, 1); }
@@ -64,11 +68,35 @@
 .stagger-2 { animation: slideUp 0.4s ease-out 0.1s both; }
 .stagger-3 { animation: slideUp 0.4s ease-out 0.15s both; }
 .stagger-4 { animation: slideUp 0.4s ease-out 0.2s both; }
-@keyframes fadeIn { from { opacity: 0; transform: translateY(8px); } to { opacity: 1; transform: translateY(0); } }
-@keyframes slideUp { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+@keyframes fadeIn  { from { opacity: 0; transform: translateY(8px); }  to { opacity: 1; transform: translateY(0); } }
+@keyframes slideUp { from { opacity: 0; transform: translateY(24px); } to { opacity: 1; transform: translateY(0); } }
+@keyframes scaleIn { from { opacity: 0; transform: scale(0.95); }      to { opacity: 1; transform: scale(1); } }
+@keyframes shimmer { 0% { background-position: -200% 0; } 100% { background-position: 200% 0; } }
+@keyframes pulseSoft { 0%,100% { opacity: 1; } 50% { opacity: 0.6; } }
+@keyframes float    { 0%,100% { transform: translateY(0); } 50% { transform: translateY(-6px); } }
+@keyframes glow     { 0%,100% { box-shadow: 0 0 20px rgba(99,102,241,0.3); } 50% { box-shadow: 0 0 40px rgba(99,102,241,0.6); } }
+@keyframes bounceSoft { 0% { transform: scale(0.9); } 50% { transform: scale(1.05); } 100% { transform: scale(1); } }
+
+/* Classes d'animation nommées (utilisées via className) */
+.animate-fade-in   { animation: fadeIn 0.3s ease-out; }
+.animate-slide-up  { animation: slideUp 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+.animate-scale-in  { animation: scaleIn 0.2s ease-out; }
+.animate-shimmer   { animation: shimmer 1.5s infinite; }
+.animate-pulse-soft{ animation: pulseSoft 2s ease-in-out infinite; }
+.animate-float     { animation: float 3s ease-in-out infinite; }
+.animate-glow      { animation: glow 2s ease-in-out infinite; }
+.animate-bounce-soft { animation: bounceSoft 0.6s ease-out; }
 
 /* Focus ring */
-*:focus-visible { @apply outline-none ring-2 ring-primary-500 ring-offset-2; }
+*:focus-visible { outline: none; box-shadow: 0 0 0 2px #6366f1, 0 0 0 4px rgba(99,102,241,0.2); border-radius: 0.5rem; }
+
+/* Glow utilitaires (inline style) */
+.shadow-glow-sm     { box-shadow: 0 0 12px rgba(99,102,241,0.2); }
+.shadow-glow-primary{ box-shadow: 0 0 30px rgba(99,102,241,0.35); }
+.shadow-card        { box-shadow: 0 1px 3px rgba(0,0,0,0.05), 0 8px 24px rgba(0,0,0,0.06); }
+.shadow-card-hover  { box-shadow: 0 4px 6px rgba(0,0,0,0.04), 0 16px 40px rgba(0,0,0,0.10); }
+.shadow-modal       { box-shadow: 0 24px 60px rgba(0,0,0,0.25); }
 
 /* Number inputs */
 input[type=number]::-webkit-inner-spin-button,
