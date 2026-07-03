@@ -52,7 +52,7 @@ export default function PayrollVariables() {
 
   const fetchData = async () => {
     if (!periodId) return
-    const { data: periodData } = await supabase.from('payroll_periods').select('*, clients(name)').eq('id', periodId).single()
+    const { data: periodData } = await supabase.from('payroll_periods').select('*, clients(name, logo_url, num_employeur, nif, bp, phone, entite_name)').eq('id', periodId).single()
     setPeriod(periodData)
     if (!periodData) { setLoading(false); return }
     const { data: empData } = await supabase.from('employees').select('*, clients(name)').eq('client_id', periodData.client_id).eq('active', true).order('last_name')
