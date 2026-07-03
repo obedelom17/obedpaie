@@ -280,8 +280,10 @@ export default function PayrollVariables() {
                       <label className="label">{label}</label>
                       <input
                         type="number" min="0" disabled={isClosed}
-                        value={(form as any)[key]}
-                        onChange={(e) => setForm({ ...form, [key]: Number(e.target.value) })}
+                        value={(form as any)[key] === 0 ? '' : (form as any)[key]}
+                        placeholder="0"
+                        onChange={(e) => setForm({ ...form, [key]: e.target.value === '' ? 0 : Number(e.target.value) })}
+                        onFocus={(e) => e.target.select()}
                         className="input"
                       />
                     </div>

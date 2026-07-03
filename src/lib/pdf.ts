@@ -94,13 +94,13 @@ export async function generateBulletinPDF(data: BulletinData): Promise<jsPDF> {
   // ── Bloc infos salarié ────────────────────────────────────────────────────
   doc.setDrawColor(140, 140, 140); doc.setLineWidth(0.3)
   doc.rect(ml, y, mr - ml, 38)
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...BLACK)
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(...BLACK)
   const empName = `${employee.last_name} ${employee.first_name}`
   const infoLeft = ml + 4; let iy = y + 5.5
   const line = (label: string, val: string) => {
     doc.setFont('helvetica', 'bold'); doc.text(label, infoLeft + 28, iy, { align: 'right' })
     doc.setFont('helvetica', 'normal'); doc.text(val, infoLeft + 30, iy)
-    iy += 4.5
+    iy += 4.2
   }
   line('Nom & Prénoms :', empName)
   line("N°Assuré :", employee.social_security_number || employee.matricule || '—')
@@ -118,10 +118,10 @@ export async function generateBulletinPDF(data: BulletinData): Promise<jsPDF> {
   // ── Tableau principal ─────────────────────────────────────────────────────
   // En-tête colonnes
   const COL = { code: 14, rub: 30, base: 100, taux: 130, ret: 155, gains: 180 }
-  const headerH = 6
+  const headerH = 5.5
   doc.setFillColor(220, 220, 220)
   doc.rect(ml, y, mr - ml, headerH, 'FD')
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(...BLACK)
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(8.5); doc.setTextColor(...BLACK)
   doc.text('Code', COL.code + 3, y + 4)
   doc.text('Rubriques', COL.rub + 2, y + 4)
   doc.text('Base', COL.base + 8, y + 4, { align: 'right' })
@@ -142,8 +142,8 @@ export async function generateBulletinPDF(data: BulletinData): Promise<jsPDF> {
     { label: variables.meal_premium > 0 ? 'Prime de repas' : '', base: variables.meal_premium || 0, gains: variables.meal_premium || 0 },
   ]
 
-  const rowH = 5.5
-  doc.setFont('helvetica', 'normal'); doc.setFontSize(8)
+  const rowH = 5.2
+  doc.setFont('helvetica', 'normal'); doc.setFontSize(8.5)
   for (const row of rubriqueRows) {
     doc.rect(ml, y, mr - ml, rowH)
     if (row.label) {
@@ -163,7 +163,7 @@ export async function generateBulletinPDF(data: BulletinData): Promise<jsPDF> {
 
   // Ligne Salaire brut (texte rouge + valeur)
   doc.rect(ml, y, mr - ml, rowH, 'D')
-  doc.setFont('helvetica', 'bold'); doc.setTextColor(...RED_LINE)
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...RED_LINE)
   doc.text('Salaire brut', COL.rub + 2, y + 3.8)
   doc.setTextColor(...BLACK)
   doc.text(num(result.gross_salary), mr - 2, y + 3.8, { align: 'right' })
@@ -220,7 +220,7 @@ export async function generateBulletinPDF(data: BulletinData): Promise<jsPDF> {
   // NET A PAYER (fond gris foncé)
   doc.setFillColor(200, 200, 200)
   doc.rect(ml, y, mr - ml, rowH + 1, 'FD')
-  doc.setFont('helvetica', 'bold'); doc.setFontSize(9); doc.setTextColor(...BLACK)
+  doc.setFont('helvetica', 'bold'); doc.setFontSize(10); doc.setTextColor(...BLACK)
   doc.text('NET A PAYER', (ml + mr) / 2, y + 4.5, { align: 'center' })
   doc.text(num(result.net_payable - (otherRet - advance)), mr - 2, y + 4.5, { align: 'right' })
   y += rowH + 1 + 6
