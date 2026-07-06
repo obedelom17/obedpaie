@@ -4,8 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { calculatePayroll, formatXOF, MONTH_NAMES, PayrollInput, PayrollResult } from '../lib/payroll'
 import { generateBulletinPDF } from '../lib/pdf'
-import { sendBulletinEmail } from '../lib/email'
-import { ArrowLeft, Calculator, FileText, Save, Lock, Loader2, Search, Info, Mail, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Calculator, FileText, Save, Lock, Loader2, Search, Info } from 'lucide-react'
 
 interface Employee {
   id: string; first_name: string; last_name: string; matricule: string | null
@@ -45,8 +44,6 @@ export default function PayrollVariables() {
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [calculating, setCalculating] = useState(false)
-  const [emailing, setEmailing] = useState(false)
-  const [emailSuccess, setEmailSuccess] = useState(false)
 
   useEffect(() => { if (periodId) fetchData() }, [periodId])
 
@@ -66,7 +63,6 @@ export default function PayrollVariables() {
 
   const selectEmployee = (emp: Employee) => {
     setSelectedEmpId(emp.id)
-    setEmailSuccess(false)
     const existing = variables.get(emp.id)
     if (existing) {
       setForm({
@@ -137,20 +133,6 @@ export default function PayrollVariables() {
     const emp = employees.find((e) => e.id === selectedEmpId)
     if (!emp) return
     await generateBulletinPDF({ employee: emp, period, variables: form, result, orgName: org?.name || '' })
-  }
-
-  const handleSendEmail = async () => {
-    if (!selectedEmpId || !result || !period || !org) return
-    const emp = employees.find((e) => e.id === selectedEmpId)
-    if (!emp || !emp.email) { alert("Cet employé n'a pas d'adresse email. Modifiez sa fiche d'abord."); return }
-    setEmailing(true)
-    const doc = await generateBulletinPDF({ employee: emp, period, variables: form, result, orgName: org.name || '', returnDoc: true })
-    const pdfBase64 = doc.output('datauristring').split(',')[1]
-    const periodLabel = `${MONTH_NAMES[period.period_month - 1]} ${period.period_year}`
-    const { success, error } = await sendBulletinEmail({ to: emp.email!, employeeName: `${emp.first_name} ${emp.last_name}`, period: periodLabel, pdfBase64, cabinetName: org.name || 'Cabinet', orgId: org.id })
-    setEmailing(false)
-    if (success) setEmailSuccess(true)
-    else alert('Erreur envoi : ' + error)
   }
 
   const handleClosePeriod = async () => {
@@ -290,10 +272,6 @@ export default function PayrollVariables() {
                     <FileText className="w-4 h-4" /> Bulletin PDF
                   </button>
 
-                  <button onClick={handleSendEmail} disabled={!result || isClosed || emailing} className="btn-ghost text-emerald-600 hover:bg-emerald-50">
-                    {emailing ? <Loader2 className="w-4 h-4 animate-spin" /> : emailSuccess ? <CheckCircle2 className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
-                    {emailSuccess ? 'Envoyé !' : 'Email'}
-                  </button>
                 </div>
               </div>
 

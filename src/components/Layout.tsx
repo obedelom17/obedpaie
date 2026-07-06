@@ -4,7 +4,7 @@ import { useAuth } from '../context/AuthContext'
 import {
   LayoutDashboard, Building2, Users, Grid3x3, CalendarClock,
   LogOut, Menu, Calculator, Download, FlaskConical, X, ChevronRight,
-  Activity, Settings2
+  Activity
 } from 'lucide-react'
 import { AIChatbot } from './AIChatbot'
 import { NotificationBadge } from './NotificationBadge'
@@ -19,7 +19,6 @@ const navItems = [
   { to: '/simulator', label: 'Simulateur', icon: FlaskConical },
   { to: '/export', label: 'Export & Rapports', icon: Download },
   { to: '/activity', label: 'Journal activité', icon: Activity },
-  { to: '/settings', label: 'Paramètres', icon: Settings2 },
 ]
 
 export default function Layout({ children }: { children: ReactNode }) {

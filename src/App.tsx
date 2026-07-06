@@ -12,7 +12,6 @@ import PayrollVariables from './pages/PayrollVariables'
 import Simulator from './pages/Simulator'
 import ExportReports from './pages/ExportReports'
 import ActivityLog from './pages/ActivityLog'
-import Settings from './pages/Settings'
 import Layout from './components/Layout'
 
 function ProtectedRoutes() {
@@ -42,7 +41,6 @@ function ProtectedRoutes() {
         <Route path="/simulator" element={<Simulator />} />
         <Route path="/export" element={<ExportReports />} />
         <Route path="/activity" element={<ActivityLog />} />
-        <Route path="/settings" element={<Settings />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
