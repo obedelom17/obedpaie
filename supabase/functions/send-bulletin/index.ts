@@ -9,9 +9,7 @@ const corsHeaders = {
 }
 
 serve(async (req) => {
-  if (req.method === 'OPTIONS') {
-    return new Response(null, { headers: corsHeaders })
-  }
+  if (req.method === 'OPTIONS') return new Response(null, { headers: corsHeaders })
 
   try {
     const { to, employeeName, period, pdfBase64, cabinetName } = await req.json()
@@ -23,7 +21,7 @@ serve(async (req) => {
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({
-        from: `${cabinetName} <paie@obedpaie.tg>`,
+        from: 'ObedPaie <onboarding@resend.dev>',
         to: [to],
         subject: `Bulletin de paie — ${period}`,
         html: `
@@ -34,20 +32,16 @@ serve(async (req) => {
             <p>Cordialement,<br/><strong>${cabinetName}</strong></p>
           </div>
         `,
-        attachments: [
-          {
-            filename: `bulletin-${period.replace(' ', '-')}.pdf`,
-            content: pdfBase64,
-          },
-        ],
+        attachments: [{
+          filename: `bulletin-${period.replace(' ', '-')}.pdf`,
+          content: pdfBase64,
+        }],
       }),
     })
 
     const data = await res.json()
     if (!res.ok) return new Response(JSON.stringify({ error: data }), { status: 400, headers: { 'Content-Type': 'application/json', ...corsHeaders } })
-    return new Response(JSON.stringify({ success: true, id: data.id }), {
-      headers: { 'Content-Type': 'application/json', ...corsHeaders },
-    })
+    return new Response(JSON.stringify({ success: true }), { headers: { 'Content-Type': 'application/json', ...corsHeaders } })
   } catch (e) {
     return new Response(JSON.stringify({ error: String(e) }), { status: 500, headers: { 'Content-Type': 'application/json', ...corsHeaders } })
   }

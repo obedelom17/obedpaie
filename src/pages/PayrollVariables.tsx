@@ -147,7 +147,7 @@ export default function PayrollVariables() {
     const doc = await generateBulletinPDF({ employee: emp, period, variables: form, result, orgName: org.name || '', returnDoc: true })
     const pdfBase64 = doc.output('datauristring').split(',')[1]
     const periodLabel = `${MONTH_NAMES[period.period_month - 1]} ${period.period_year}`
-    const { success, error } = await sendBulletinEmail({ to: emp.email!, employeeName: `${emp.first_name} ${emp.last_name}`, period: periodLabel, pdfBase64, cabinetName: org.name || 'Cabinet' })
+    const { success, error } = await sendBulletinEmail({ to: emp.email!, employeeName: `${emp.first_name} ${emp.last_name}`, period: periodLabel, pdfBase64, cabinetName: org.name || 'Cabinet', orgId: org.id })
     setEmailing(false)
     if (success) setEmailSuccess(true)
     else alert('Erreur envoi : ' + error)
