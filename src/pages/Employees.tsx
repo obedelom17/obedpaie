@@ -385,6 +385,11 @@ export default function Employees() {
                 </div>
                 <div><label className="label">Enfants à charge</label><input type="number" min="0" max="6" value={form.children_count} onChange={e => setForm({...form, children_count: Number(e.target.value)})} className="input" /></div>
               </div>
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className="label">Email</label><input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="input" placeholder="prenom.nom@email.com" /></div>
+                <div><label className="label">Téléphone</label><input type="tel" value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="input" placeholder="+228 xx xx xx xx" /></div>
+              </div>
+              <div><label className="label">N° Sécurité sociale</label><input value={form.social_security_number} onChange={e => setForm({...form, social_security_number: e.target.value})} className="input max-w-xs" /></div>
               <div className="flex gap-3 pt-2">
                 <button type="button" onClick={() => setShowForm(false)} className="btn-secondary flex-1">Annuler</button>
                 <button type="submit" className="btn-primary flex-1">{editing ? 'Mettre à jour' : 'Créer'}</button>
