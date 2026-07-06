@@ -3,9 +3,9 @@ import { useParams, Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../context/AuthContext'
 import { calculatePayroll, formatXOF, MONTH_NAMES, PayrollInput, PayrollResult } from '../lib/payroll'
-import { generateBulletinPDF, uploadBulletinToStorage } from '../lib/pdf'
+import { generateBulletinPDF } from '../lib/pdf'
 import { sendBulletinEmail } from '../lib/email'
-import { ArrowLeft, Calculator, FileText, Save, Lock, Loader2, Search, Info, Upload, Mail, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Calculator, FileText, Save, Lock, Loader2, Search, Info, Mail, CheckCircle2 } from 'lucide-react'
 
 interface Employee {
   id: string; first_name: string; last_name: string; matricule: string | null
@@ -45,9 +45,7 @@ export default function PayrollVariables() {
   const [search, setSearch] = useState('')
   const [saving, setSaving] = useState(false)
   const [calculating, setCalculating] = useState(false)
-  const [uploading, setUploading] = useState(false)
   const [emailing, setEmailing] = useState(false)
-  const [uploadedUrl, setUploadedUrl] = useState<string | null>(null)
   const [emailSuccess, setEmailSuccess] = useState(false)
 
   useEffect(() => { if (periodId) fetchData() }, [periodId])
@@ -69,7 +67,6 @@ export default function PayrollVariables() {
   const selectEmployee = (emp: Employee) => {
     setSelectedEmpId(emp.id)
     setEmailSuccess(false)
-    setUploadedUrl(null)
     const existing = variables.get(emp.id)
     if (existing) {
       setForm({
@@ -140,19 +137,6 @@ export default function PayrollVariables() {
     const emp = employees.find((e) => e.id === selectedEmpId)
     if (!emp) return
     await generateBulletinPDF({ employee: emp, period, variables: form, result, orgName: org?.name || '' })
-  }
-
-  const handleArchivePDF = async () => {
-    if (!selectedEmpId || !result || !period || !org) return
-    const emp = employees.find((e) => e.id === selectedEmpId)
-    if (!emp) return
-    setUploading(true)
-    const doc = await generateBulletinPDF({ employee: emp, period, variables: form, result, orgName: org.name || '', returnDoc: true })
-    const periodLabel = `${MONTH_NAMES[period.period_month - 1]}-${period.period_year}`
-    const { url, error } = await uploadBulletinToStorage(doc, emp.id, periodLabel, org.id)
-    setUploading(false)
-    if (url) setUploadedUrl(url)
-    else alert('Erreur archivage : ' + error)
   }
 
   const handleSendEmail = async () => {
@@ -305,20 +289,12 @@ export default function PayrollVariables() {
                   <button onClick={handleGeneratePDF} disabled={!result || isClosed} className="btn-ghost text-primary-600 hover:bg-primary-50">
                     <FileText className="w-4 h-4" /> Bulletin PDF
                   </button>
-                  <button onClick={handleArchivePDF} disabled={!result || isClosed || uploading} className="btn-ghost text-violet-600 hover:bg-violet-50">
-                    {uploading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Upload className="w-4 h-4" />}
-                    Archiver
-                  </button>
+
                   <button onClick={handleSendEmail} disabled={!result || isClosed || emailing} className="btn-ghost text-emerald-600 hover:bg-emerald-50">
                     {emailing ? <Loader2 className="w-4 h-4 animate-spin" /> : emailSuccess ? <CheckCircle2 className="w-4 h-4" /> : <Mail className="w-4 h-4" />}
                     {emailSuccess ? 'Envoyé !' : 'Email'}
                   </button>
                 </div>
-                {uploadedUrl && (
-                  <p className="text-xs text-violet-600 mt-2">
-                    Archivé · <a href={uploadedUrl} target="_blank" rel="noreferrer" className="underline">Voir le PDF</a>
-                  </p>
-                )}
               </div>
 
               {/* Résultats */}
