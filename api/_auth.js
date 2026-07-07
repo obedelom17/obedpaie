@@ -1,29 +1,25 @@
 /**
- * Vérifie la session Better Auth sur chaque requête API protégée.
- * Better Auth stocke la session dans un cookie (session_token) ou header Bearer.
+ * Neon Auth — session helper pour les routes API protégées.
+ * Utilise @neondatabase/auth (SDK natif Neon, propulsé par Better Auth).
  */
-import { betterAuth } from 'better-auth'
-import { Pool } from '@neondatabase/serverless'
+import { createNeonAuth } from '@neondatabase/auth/next/server'
 
 let _auth = null
 
 export function getAuth() {
   if (_auth) return _auth
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL })
-  _auth = betterAuth({
-    database: { dialect: 'postgresql', db: pool },
-    emailAndPassword: { enabled: true },
-    trustedOrigins: [process.env.BETTER_AUTH_URL || 'https://elompaie.vercel.app'],
-    secret: process.env.BETTER_AUTH_SECRET,
+  _auth = createNeonAuth({
+    baseUrl: process.env.NEON_AUTH_BASE_URL,
+    cookies: { secret: process.env.NEON_AUTH_COOKIE_SECRET },
   })
   return _auth
 }
 
 export async function requireAuth(req) {
   const auth = getAuth()
-  const session = await auth.api.getSession({ headers: req.headers })
+  const session = await auth.getSession({ headers: req.headers })
   if (!session?.user) throw new Error('Non authentifié')
-  // Récupérer orgId depuis la table users
+
   const { sql } = await import('./_db.js')
   const res = await sql(
     'SELECT u.organization_id, o.name as org_name FROM "user" u JOIN organizations o ON u.organization_id = o.id WHERE u.id = $1',

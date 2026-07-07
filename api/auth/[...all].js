@@ -1,30 +1,15 @@
 /**
- * Neon Auth (Better Auth) — catch-all handler
- * Gère : POST /api/auth/sign-in/email
- *         POST /api/auth/sign-up/email
- *         POST /api/auth/sign-out
- *         GET  /api/auth/get-session
+ * Neon Auth — catch-all handler
+ * Gère toutes les routes /api/auth/* (sign-in, sign-up, sign-out, get-session, etc.)
  */
-import { betterAuth } from 'better-auth'
-import { Pool } from '@neondatabase/serverless'
-
-let _auth = null
-
-function getAuth() {
-  if (_auth) return _auth
-  const pool = new Pool({ connectionString: process.env.DATABASE_URL })
-  _auth = betterAuth({
-    database: { dialect: 'postgresql', db: pool },
-    emailAndPassword: { enabled: true },
-    trustedOrigins: [process.env.BETTER_AUTH_URL || 'https://elompaie.vercel.app'],
-    secret: process.env.BETTER_AUTH_SECRET,
-  })
-  return _auth
-}
+import { getAuth } from '../_auth.js'
 
 export const config = { runtime: 'nodejs' }
 
 export default async function handler(req, res) {
   const auth = getAuth()
-  return auth.handler(req, res)
+  const { GET, POST } = auth.handler()
+  if (req.method === 'GET') return GET(req, res)
+  if (req.method === 'POST') return POST(req, res)
+  return res.status(405).end()
 }
