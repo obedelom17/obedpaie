@@ -79,15 +79,16 @@ export const activityApi = {
     request<any>('POST', '/activity', { action, details }),
 }
 
-// ── Logo upload ───────────────────────────────────────────────────────────
+// ── Logo upload → Vercel Blob ─────────────────────────────────────────────
 export async function uploadLogo(file: File): Promise<string> {
-  const token = getToken()
-  const form = new FormData()
-  form.append('file', file)
+  const arrayBuffer = await file.arrayBuffer()
   const res = await fetch(`${BASE}/upload-logo`, {
     method: 'POST',
-    headers: token ? { Authorization: `Bearer ${token}` } : {},
-    body: form,
+    headers: {
+      'x-content-type': file.type,
+      'x-filename': file.name,
+    },
+    body: arrayBuffer,
   })
   const data = await res.json()
   if (!res.ok) throw new Error(data.error)

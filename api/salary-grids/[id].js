@@ -1,6 +1,6 @@
 import { sql } from '../_db.js'
 import { requireAuth } from '../_auth.js'
-export const config = { runtime: 'edge' }
+export const config = { runtime: 'nodejs' }
 export default async function handler(req, { params }) {
   try {
     await requireAuth(req)

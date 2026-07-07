@@ -1,7 +1,7 @@
 {
   "name": "paie-togo",
   "private": true,
-  "version": "3.0.0",
+  "version": "3.1.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -10,6 +10,9 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@better-auth/client": "^1.2.7",
+    "better-auth": "^1.2.7",
+    "@neondatabase/serverless": "^0.10.4",
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^3.8.4",
     "lucide-react": "^0.453.0",
@@ -19,7 +22,8 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.0",
     "recharts": "^3.9.1",
-    "resend": "^6.16.0"
+    "resend": "^6.16.0",
+    "@vercel/blob": "^0.27.0"
   },
   "devDependencies": {
     "@types/papaparse": "^5.3.14",

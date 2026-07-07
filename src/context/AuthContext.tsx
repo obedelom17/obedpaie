@@ -1,8 +1,8 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { authApi } from '../lib/api'
+import { authClient } from '../lib/auth-client'
 
 interface OrgInfo { id: string; name: string }
-interface UserInfo { id: string; email: string }
+interface UserInfo { id: string; email: string; name?: string }
 interface AuthContextType {
   user: UserInfo | null
   org: OrgInfo | null
@@ -20,52 +20,71 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    const token = localStorage.getItem('auth_token')
-    const userData = localStorage.getItem('auth_user')
-    const orgData = localStorage.getItem('auth_org')
-    if (token && userData && orgData) {
-      try {
-        setUser(JSON.parse(userData))
-        setOrg(JSON.parse(orgData))
-      } catch { clearAuth() }
-    }
-    setLoading(false)
+    // Récupérer session Better Auth au démarrage
+    authClient.getSession().then(({ data }) => {
+      if (data?.user) {
+        setUser({ id: data.user.id, email: data.user.email, name: data.user.name })
+        // Récupérer org depuis localStorage (définie au signup/signin)
+        const storedOrg = localStorage.getItem('auth_org')
+        if (storedOrg) setOrg(JSON.parse(storedOrg))
+        else fetchOrg(data.user.id)
+      }
+      setLoading(false)
+    }).catch(() => setLoading(false))
   }, [])
 
-  function clearAuth() {
-    localStorage.removeItem('auth_token')
-    localStorage.removeItem('auth_user')
-    localStorage.removeItem('auth_org')
-    setUser(null); setOrg(null)
-  }
-
-  function saveAuth(token: string, user: UserInfo, org: OrgInfo) {
-    localStorage.setItem('auth_token', token)
-    localStorage.setItem('auth_user', JSON.stringify(user))
-    localStorage.setItem('auth_org', JSON.stringify(org))
-    setUser(user); setOrg(org)
+  const fetchOrg = async (userId: string) => {
+    try {
+      const res = await fetch('/api/auth/me')
+      if (res.ok) {
+        const data = await res.json()
+        setOrg(data.org)
+        localStorage.setItem('auth_org', JSON.stringify(data.org))
+      }
+    } catch {}
   }
 
   const signIn = async (email: string, password: string) => {
-    try {
-      const data = await authApi.signIn(email, password)
-      saveAuth(data.token, data.user, data.org)
-      return { error: null }
-    } catch (e: any) { return { error: e.message } }
+    const { data, error } = await authClient.signIn.email({ email, password })
+    if (error) return { error: error.message || 'Erreur de connexion' }
+    if (data?.user) {
+      setUser({ id: data.user.id, email: data.user.email })
+      await fetchOrg(data.user.id)
+    }
+    return { error: null }
   }
 
   const signUp = async (email: string, password: string, orgName: string) => {
     try {
-      const data = await authApi.signUp(email, password, orgName)
-      saveAuth(data.token, data.user, data.org)
+      // 1. Créer user + org via notre endpoint custom
+      const res = await fetch('/api/auth/signup-org', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, orgName }),
+      })
+      const data = await res.json()
+      if (!res.ok) return { error: data.error }
+
+      // 2. Connecter
+      const { error } = await authClient.signIn.email({ email, password })
+      if (error) return { error: error.message }
+
+      const session = await authClient.getSession()
+      if (session.data?.user) setUser({ id: session.data.user.id, email: session.data.user.email })
+      setOrg(data.org)
+      localStorage.setItem('auth_org', JSON.stringify(data.org))
       return { error: null }
     } catch (e: any) { return { error: e.message } }
   }
 
-  const signOut = () => clearAuth()
+  const handleSignOut = async () => {
+    await authClient.signOut()
+    setUser(null); setOrg(null)
+    localStorage.removeItem('auth_org')
+  }
 
   return (
-    <AuthContext.Provider value={{ user, org, loading, signIn, signUp, signOut }}>
+    <AuthContext.Provider value={{ user, org, loading, signIn, signUp, signOut: handleSignOut }}>
       {children}
     </AuthContext.Provider>
   )

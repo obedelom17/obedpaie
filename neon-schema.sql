@@ -132,3 +132,10 @@ CREATE INDEX IF NOT EXISTS idx_payroll_periods_client ON payroll_periods(client_
 CREATE INDEX IF NOT EXISTS idx_payroll_vars_period ON payroll_variables(period_id);
 CREATE INDEX IF NOT EXISTS idx_payroll_vars_employee ON payroll_variables(employee_id);
 CREATE INDEX IF NOT EXISTS idx_activity_org ON activity_logs(organization_id);
+
+-- Better Auth crée automatiquement ces tables via `npx @better-auth/cli migrate`
+-- Après migration Better Auth, ajouter la colonne organization_id :
+ALTER TABLE "user" ADD COLUMN IF NOT EXISTS organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL;
+
+-- Index
+CREATE INDEX IF NOT EXISTS idx_user_org ON "user"(organization_id);
