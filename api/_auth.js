@@ -1,23 +1,31 @@
-import * as jose from 'jose'
+/**
+ * Neon Auth (Better Auth) — vérification session via API
+ * Les tokens sont opaques (pas des JWT), validés via /get-session
+ */
 import { sql } from './_db.js'
-
-const getJWKS = (() => {
-  let jwks = null
-  return () => {
-    if (!jwks) jwks = jose.createRemoteJWKSet(new URL(`${process.env.NEON_AUTH_BASE_URL}/.well-known/jwks.json`))
-    return jwks
-  }
-})()
 
 export async function requireAuth(req) {
   const authHeader = req.headers?.authorization || req.headers?.Authorization
   if (!authHeader?.startsWith('Bearer ')) throw new Error('Non authentifié')
 
   const token = authHeader.slice(7)
-  const { payload } = await jose.jwtVerify(token, getJWKS())
-  const userId = payload.sub
-  if (!userId) throw new Error('Token invalide')
+  const baseUrl = process.env.NEON_AUTH_BASE_URL
 
+  // Valider le session token via Neon Auth API
+  const sessionRes = await fetch(`${baseUrl}/get-session`, {
+    headers: {
+      'Authorization': `Bearer ${token}`,
+      'Content-Type': 'application/json',
+    },
+  })
+
+  if (!sessionRes.ok) throw new Error('Non authentifié')
+  const session = await sessionRes.json()
+
+  const userId = session?.user?.id
+  if (!userId) throw new Error('Session invalide')
+
+  // Récupérer org depuis notre DB
   const res = await sql(
     `SELECT u.id, u.email, u.organization_id, o.name as org_name
      FROM neon_auth.users_sync u
@@ -27,8 +35,7 @@ export async function requireAuth(req) {
   )
 
   if (!res.rows.length) {
-    // User existe dans Neon Auth mais pas encore en DB → retourner sans org
-    return { userId, email: payload.email, orgId: null, orgName: null }
+    return { userId, email: session.user.email, orgId: null, orgName: null }
   }
 
   const row = res.rows[0]

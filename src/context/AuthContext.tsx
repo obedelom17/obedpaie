@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useState, ReactNode } from 'react'
-import { authClient } from '../lib/auth-client'
+import { authClient, getJWTToken } from '../lib/auth-client'
 import { setAuthToken } from '../lib/api'
 
 interface OrgInfo { id: string; name: string }
@@ -8,7 +8,6 @@ interface AuthContextType {
   user: UserInfo | null
   org: OrgInfo | null
   loading: boolean
-  token: string | null
   signIn: (email: string, password: string) => Promise<{ error: string | null }>
   signUp: (email: string, password: string, orgName: string) => Promise<{ error: string | null }>
   signOut: () => void
@@ -16,72 +15,65 @@ interface AuthContextType {
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined)
 
+async function refreshToken() {
+  const jwt = await getJWTToken()
+  if (jwt) setAuthToken(jwt)
+  return jwt
+}
+
+async function fetchOrg(jwt: string) {
+  try {
+    const res = await fetch('/api/auth/me', { headers: { Authorization: `Bearer ${jwt}` } })
+    if (res.ok) return (await res.json()).org
+  } catch {}
+  return null
+}
+
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<UserInfo | null>(null)
   const [org, setOrg] = useState<OrgInfo | null>(null)
-  const [token, setToken] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
-
-  const fetchOrg = async (jwt: string) => {
-    try {
-      const res = await fetch('/api/auth/me', {
-        headers: { Authorization: `Bearer ${jwt}` },
-      })
-      if (res.ok) {
-        const data = await res.json()
-        setOrg(data.org)
-      }
-    } catch {}
-  }
 
   useEffect(() => {
     authClient.getSession().then(async (res: any) => {
-      const sessionData = res?.data ?? res
-      const jwt = sessionData?.session?.token || sessionData?.token
-      const userData = sessionData?.user
-      if (jwt && userData) {
-        setToken(jwt); setAuthToken(jwt)
+      const userData = res?.data?.user ?? res?.user
+      if (userData) {
         setUser({ id: userData.id, email: userData.email, name: userData.name })
-        await fetchOrg(jwt)
+        const jwt = await refreshToken()
+        if (jwt) setOrg(await fetchOrg(jwt))
       }
       setLoading(false)
     }).catch(() => setLoading(false))
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    const signInRes = await authClient.signIn.email({ email, password }) as any
-    if (signInRes.error) return { error: signInRes.error.message || 'Erreur de connexion' }
-    const sessionData = signInRes.data ?? signInRes
-    const jwt = sessionData?.session?.token || sessionData?.token
-    const userData = sessionData?.user
-    if (jwt) {
-      setToken(jwt); setAuthToken(jwt)
-      setUser({ id: userData?.id, email: userData?.email || email })
-      await fetchOrg(jwt)
+    const res = await authClient.signIn.email({ email, password }) as any
+    if (res.error) return { error: res.error.message || 'Erreur de connexion' }
+    const userData = res.data?.user ?? res.user
+    if (userData) {
+      setUser({ id: userData.id, email: userData.email })
+      const jwt = await refreshToken()
+      if (jwt) setOrg(await fetchOrg(jwt))
     }
     return { error: null }
   }
 
   const signUp = async (email: string, password: string, orgName: string) => {
     try {
-      // 1. Inscription via Neon Auth
-      const { data, error } = await authClient.signUp.email({ email, password, name: email.split('@')[0] }) as any
-      if (error) return { error: error.message }
+      const res = await authClient.signUp.email({ email, password, name: email.split('@')[0] }) as any
+      if (res.error) return { error: res.error.message }
 
-      // 2. Connecter pour obtenir JWT
+      // Sign in après inscription
       const signInRes = await authClient.signIn.email({ email, password }) as any
       if (signInRes.error) return { error: signInRes.error.message }
 
-      // Neon Auth peut retourner session dans data ou directement
-      const sessionData = signInRes.data ?? signInRes
-      const jwt = sessionData?.session?.token || sessionData?.token
-      const userData = sessionData?.user || signInRes.data?.user
-      if (!jwt) return { error: 'Session invalide' }
+      const userData = signInRes.data?.user ?? signInRes.user
+      if (userData) setUser({ id: userData.id, email: userData.email })
 
-      setToken(jwt); setAuthToken(jwt)
-      setUser({ id: userData?.id, email: userData?.email || email })
+      const jwt = await refreshToken()
+      if (!jwt) return { error: 'Token introuvable après connexion' }
 
-      // 3. Créer organisation
+      // Créer organisation
       const orgRes = await fetch('/api/auth/signup-org', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${jwt}` },
@@ -97,11 +89,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const handleSignOut = async () => {
     await authClient.signOut()
-    setUser(null); setOrg(null); setToken(null); setAuthToken(null)
+    setUser(null); setOrg(null); setAuthToken(null)
   }
 
   return (
-    <AuthContext.Provider value={{ user, org, loading, token, signIn, signUp, signOut: handleSignOut }}>
+    <AuthContext.Provider value={{ user, org, loading, signIn, signUp, signOut: handleSignOut }}>
       {children}
     </AuthContext.Provider>
   )
