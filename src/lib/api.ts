@@ -3,14 +3,22 @@
  */
 
 const BASE = '/api'
+const TOKEN_KEY = 'elompaie_token'
 
-// Token stocké en mémoire (défini par AuthContext)
-let _token: string | null = null
-export function setAuthToken(t: string | null) { _token = t }
+// Token persisté en sessionStorage
+export function setAuthToken(t: string | null) {
+  if (t) sessionStorage.setItem(TOKEN_KEY, t)
+  else sessionStorage.removeItem(TOKEN_KEY)
+}
+
+function getToken(): string | null {
+  return sessionStorage.getItem(TOKEN_KEY)
+}
 
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
+  const token = getToken()
   const headers: Record<string, string> = { 'Content-Type': 'application/json' }
-  if (_token) headers['Authorization'] = `Bearer ${_token}`
+  if (token) headers['Authorization'] = `Bearer ${token}`
 
   const res = await fetch(`${BASE}${path}`, {
     method,
@@ -72,13 +80,13 @@ export const activityApi = {
 
 // ── Logo upload → Vercel Blob ─────────────────────────────────────────────
 export async function uploadLogo(file: File): Promise<string> {
+  const token = getToken()
   const arrayBuffer = await file.arrayBuffer()
   const headers: Record<string, string> = {
     'x-content-type': file.type,
     'x-filename': file.name,
   }
-  if (_token) headers['Authorization'] = `Bearer ${_token}`
-
+  if (token) headers['Authorization'] = `Bearer ${token}`
   const res = await fetch(`${BASE}/upload-logo`, { method: 'POST', headers, body: arrayBuffer })
   const data = await res.json()
   if (!res.ok) throw new Error(data.error)

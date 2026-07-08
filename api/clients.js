@@ -38,5 +38,8 @@ export default async function handler(req, res) {
       }
     }
     return res.status(405).end()
-  } catch (e) { return res.status(e.message.includes('auth') ? 401 : 500).json({ error: e.message }) }
+  } catch (e) { 
+    const status = e.message.includes('auth') || e.message.includes('authentif') ? 401 : 500
+    return res.status(status).json({ error: e.message }) 
+  }
 }

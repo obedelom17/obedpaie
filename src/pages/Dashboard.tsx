@@ -12,7 +12,7 @@ interface Stats { clientCount: number; employeeCount: number; openPeriods: numbe
 
 export default function Dashboard() {
   const { org } = useAuth()
-  const [stats, setStats] = useState<Stats | null>(null)
+  const [stats, setStats] = useState<Stats>({ clientCount: 0, employeeCount: 0, openPeriods: 0, closedPeriods: 0, totalNetPay: 0, totalEmployer: 0 })
   const [recentPeriods, setRecentPeriods] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [showOnboarding, setShowOnboarding] = useState(false)
@@ -39,7 +39,7 @@ export default function Dashboard() {
         totalEmployer: totalEmp,
       })
       setRecentPeriods(periods.slice(0, 5))
-    } catch {} finally { setLoading(false) }
+    } catch (e) { console.error('fetchStats error:', e) } finally { setLoading(false) }
   }
 
   if (loading) return <div className="space-y-6 page-enter"><div className="grid grid-cols-2 lg:grid-cols-4 gap-4">{[...Array(4)].map((_, i) => <CardSkeleton key={i} />)}</div></div>
