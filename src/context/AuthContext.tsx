@@ -35,11 +35,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   useEffect(() => {
-    authClient.getSession().then(async ({ data }: any) => {
-      if (data?.session?.token) {
-        const jwt = data.session.token
+    authClient.getSession().then(async (res: any) => {
+      const sessionData = res?.data ?? res
+      const jwt = sessionData?.session?.token || sessionData?.token
+      const userData = sessionData?.user
+      if (jwt && userData) {
         setToken(jwt); setAuthToken(jwt)
-        setUser({ id: data.user.id, email: data.user.email, name: data.user.name })
+        setUser({ id: userData.id, email: userData.email, name: userData.name })
         await fetchOrg(jwt)
       }
       setLoading(false)
@@ -47,12 +49,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await authClient.signIn.email({ email, password }) as any
-    if (error) return { error: error.message || 'Erreur de connexion' }
-    const jwt = data?.session?.token
-    if (jwt && data?.user) {
+    const signInRes = await authClient.signIn.email({ email, password }) as any
+    if (signInRes.error) return { error: signInRes.error.message || 'Erreur de connexion' }
+    const sessionData = signInRes.data ?? signInRes
+    const jwt = sessionData?.session?.token || sessionData?.token
+    const userData = sessionData?.user
+    if (jwt) {
       setToken(jwt); setAuthToken(jwt)
-      setUser({ id: data.user.id, email: data.user.email })
+      setUser({ id: userData?.id, email: userData?.email || email })
       await fetchOrg(jwt)
     }
     return { error: null }
@@ -68,11 +72,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       const signInRes = await authClient.signIn.email({ email, password }) as any
       if (signInRes.error) return { error: signInRes.error.message }
 
-      const jwt = signInRes.data?.session?.token
+      // Neon Auth peut retourner session dans data ou directement
+      const sessionData = signInRes.data ?? signInRes
+      const jwt = sessionData?.session?.token || sessionData?.token
+      const userData = sessionData?.user || signInRes.data?.user
       if (!jwt) return { error: 'Session invalide' }
 
       setToken(jwt); setAuthToken(jwt)
-      setUser({ id: signInRes.data.user.id, email: signInRes.data.user.email })
+      setUser({ id: userData?.id, email: userData?.email || email })
 
       // 3. Créer organisation
       const orgRes = await fetch('/api/auth/signup-org', {
