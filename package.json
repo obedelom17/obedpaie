@@ -10,9 +10,10 @@
     "test": "vitest run"
   },
   "dependencies": {
+    "@neondatabase/neon-js": "*",
     "@neondatabase/serverless": "^0.10.4",
     "@vercel/blob": "^0.27.0",
-    "better-auth": "^1.6.23",
+    "jose": "^5.9.6",
     "jspdf": "^2.5.2",
     "jspdf-autotable": "^3.8.4",
     "lucide-react": "^0.453.0",
@@ -22,8 +23,7 @@
     "react-dom": "^18.3.1",
     "react-router-dom": "^6.26.0",
     "recharts": "^3.9.1",
-    "resend": "^6.16.0",
-    "kysely": "^0.29.3"
+    "resend": "^6.16.0"
   },
   "devDependencies": {
     "@types/papaparse": "^5.3.14",

@@ -10,7 +10,7 @@ export default async function handler(req, res) {
     const { orgName } = req.body
     if (!orgName?.trim()) return res.status(400).json({ error: 'orgName requis' })
 
-    const sql = neon(process.env.DATABASE_URL)
+    const sql = neon(process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL)
 
     // Org existante
     if (auth.orgId) {
@@ -22,8 +22,12 @@ export default async function handler(req, res) {
     const orgs = await sql`INSERT INTO organizations (name) VALUES (${orgName.trim()}) RETURNING id::text, name`
     const org = orgs[0]
 
-    // Lier user → org (organization_id est TEXT dans "user" Better Auth)
-    await sql`UPDATE "user" SET "organization_id" = ${org.id} WHERE id = ${auth.userId}`
+    // Lier user → org via user_profiles
+    await sql`
+      INSERT INTO user_profiles (user_id, organization_id)
+      VALUES (${auth.userId}, ${org.id}::uuid)
+      ON CONFLICT (user_id) DO UPDATE SET organization_id = ${org.id}::uuid
+    `
 
     return res.status(200).json({ ok: true, org })
   } catch (e) {

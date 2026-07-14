@@ -1,9 +1,9 @@
 {
   "rewrites": [
-    { "source": "/api/auth/me", "destination": "/api/auth/me" },
-    { "source": "/api/auth/signup-org", "destination": "/api/auth/signup-org" },
-    { "source": "/api/auth/:path*", "destination": "/api/auth-handler" },
-    { "source": "/((?!api|_next|favicon|icon|manifest|assets|og-image|apple-touch-icon).*)", "destination": "/index.html" }
+    {
+      "source": "/((?!api|_next|favicon|icon|manifest|assets|og-image|apple-touch-icon).*)",
+      "destination": "/index.html"
+    }
   ],
   "headers": [
     {

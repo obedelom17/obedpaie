@@ -30,7 +30,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
-    authClient.getSession()
+    authClient.adapter.getSession()
       .then(async ({ data }: any) => {
         if (data?.user) {
           setUser({ id: data.user.id, email: data.user.email, name: data.user.name })
@@ -42,7 +42,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, [])
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await authClient.signIn.email({ email, password }) as any
+    const { data, error } = await authClient.adapter.signIn.email({ email, password }) as any
     if (error) return { error: error.message || 'Email ou mot de passe incorrect' }
     if (data?.user) {
       setUser({ id: data.user.id, email: data.user.email, name: data.user.name })
@@ -54,7 +54,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signUp = async (email: string, password: string, orgName: string) => {
     try {
       // 1. Inscription
-      const { error } = await authClient.signUp.email({
+      const { error } = await authClient.adapter.signUp.email({
         email,
         password,
         name: email.split('@')[0],
@@ -62,7 +62,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       if (error) return { error: error.message }
 
       // 2. Connexion auto
-      const { data, error: signInError } = await authClient.signIn.email({ email, password }) as any
+      const { data, error: signInError } = await authClient.adapter.signIn.email({ email, password }) as any
       if (signInError) return { error: signInError.message }
       if (data?.user) setUser({ id: data.user.id, email: data.user.email })
 
@@ -83,7 +83,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }
 
   const handleSignOut = async () => {
-    await authClient.signOut()
+    await authClient.adapter.signOut()
     setUser(null)
     setOrg(null)
   }

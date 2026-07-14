@@ -1,8 +1,7 @@
 import { neon } from '@neondatabase/serverless'
 
-// Nouvelle connexion à chaque invocation (serverless-safe)
 function getSql() {
-  return neon(process.env.DATABASE_URL)
+  return neon(process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL)
 }
 
 export async function sql(query, params = []) {

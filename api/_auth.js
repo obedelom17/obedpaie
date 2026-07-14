@@ -1,59 +1,60 @@
-import { betterAuth } from 'better-auth'
-import { fromNodeHeaders } from 'better-auth/integrations/node'
+import { createRemoteJWKSet, jwtVerify } from 'jose'
 import { neon } from '@neondatabase/serverless'
 
-let _auth = null
+const NEON_AUTH_BASE_URL = process.env.NEON_AUTH_BASE_URL
+const SESSION_COOKIE = '__Secure-neonauth.session_token'
+const SESSION_COOKIE_DEV = 'neonauth.session_token'
 
-export function getAuth() {
-  if (_auth) return _auth
+let _jwks = null
+function getJWKS() {
+  if (!_jwks) {
+    _jwks = createRemoteJWKSet(new URL(`${NEON_AUTH_BASE_URL}/.well-known/jwks.json`))
+  }
+  return _jwks
+}
 
-  _auth = betterAuth({
-    database: {
-      type: 'postgresql',
-      url: process.env.DATABASE_URL,
-    },
-    emailAndPassword: {
-      enabled: true,
-      requireEmailVerification: false,
-    },
-    trustedOrigins: [
-      process.env.BETTER_AUTH_URL || 'https://elompaie.vercel.app',
-      'http://localhost:5173',
-      'http://localhost:3000',
-    ],
-    secret: process.env.BETTER_AUTH_SECRET,
-    baseURL: process.env.BETTER_AUTH_URL || 'https://elompaie.vercel.app',
-    user: {
-      additionalFields: {
-        organization_id: {
-          type: 'string',
-          required: false,
-          defaultValue: null,
-        }
-      }
-    }
-  })
-  return _auth
+function parseCookies(cookieHeader) {
+  if (!cookieHeader) return {}
+  return Object.fromEntries(
+    cookieHeader.split(';').map(c => {
+      const [k, ...v] = c.trim().split('=')
+      return [k.trim(), decodeURIComponent(v.join('='))]
+    })
+  )
 }
 
 export async function requireAuth(req) {
-  const auth = getAuth()
-  const session = await auth.api.getSession({ headers: fromNodeHeaders(req.headers) })
-  if (!session?.user?.id) throw new Error('Non authentifié')
+  const cookies = parseCookies(req.headers?.cookie || '')
+  const token = cookies[SESSION_COOKIE] || cookies[SESSION_COOKIE_DEV]
+  if (!token) throw new Error('Non authentifié')
 
-  const sql = neon(process.env.DATABASE_URL)
+  let payload
+  try {
+    const result = await jwtVerify(token, getJWKS())
+    payload = result.payload
+  } catch {
+    throw new Error('Session invalide')
+  }
 
+  const userId = payload.sub
+  if (!userId) throw new Error('Session invalide')
+
+  const sql = neon(process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL)
+
+  // Neon Auth stocke les users dans neon_auth.users_sync
+  // organization_id est dans notre table user_profiles (ou on rejoint organizations via une table pivot)
   const rows = await sql`
-    SELECT u.id, u.email, u.organization_id, o.name as org_name
-    FROM "user" u
-    LEFT JOIN organizations o ON o.id::text = u.organization_id
-    WHERE u.id = ${session.user.id}
+    SELECT up.organization_id, o.name as org_name, nu.email
+    FROM neon_auth.users_sync nu
+    LEFT JOIN user_profiles up ON up.user_id = nu.id
+    LEFT JOIN organizations o ON o.id::text = up.organization_id
+    WHERE nu.id = ${userId}
   `
 
   const row = rows[0]
   return {
-    userId: session.user.id,
-    email: session.user.email,
+    userId,
+    email: row?.email || payload.email || '',
     orgId: row?.organization_id || null,
     orgName: row?.org_name || null,
   }
