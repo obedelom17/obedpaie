@@ -1,4 +1,4 @@
-import { createAuthClient, BetterAuthVanillaAdapter } from '@neondatabase/neon-js/auth'
+import { createAuthClient, BetterAuthVanillaAdapter } from '@neondatabase/auth'
 
 const NEON_AUTH_URL = import.meta.env.VITE_NEON_AUTH_URL
 
