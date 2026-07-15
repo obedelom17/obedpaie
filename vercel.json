@@ -1,6 +1,10 @@
 {
   "rewrites": [
     {
+      "source": "/api/neon-auth/:path*",
+      "destination": "/api/neon-auth-proxy"
+    },
+    {
       "source": "/((?!api|_next|favicon|icon|manifest|assets|og-image|apple-touch-icon).*)",
       "destination": "/index.html"
     }
