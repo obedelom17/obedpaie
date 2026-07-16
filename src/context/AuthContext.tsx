@@ -29,21 +29,22 @@ async function fetchMe(): Promise<{ user: UserInfo | null; org: OrgInfo | null }
   } catch { return { user: null, org: null } }
 }
 
-async function createOrg(orgName: string, retries = 4): Promise<OrgInfo | null> {
-  for (let i = 0; i < retries; i++) {
-    if (i > 0) await sleep(1000 * i)
+// Crée ou récupère l'org pour l'user connecté
+async function ensureOrg(orgName?: string): Promise<OrgInfo | null> {
+  for (let i = 0; i < 4; i++) {
+    if (i > 0) await sleep(800 * i)
     try {
-      const res = await fetch('/api/auth/signup-org', {
+      const res = await fetch('/api/auth/repair-org', {
         method: 'POST',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ orgName }),
+        body: JSON.stringify({ orgName: orgName || '' }),
       })
       const data = await res.json()
       if (res.ok && data.org) return data.org
-      console.warn(`[signup-org] tentative ${i + 1}:`, data.error)
+      console.warn(`[ensureOrg] tentative ${i + 1}:`, data.error)
     } catch (e) {
-      console.warn(`[signup-org] tentative ${i + 1} exception:`, e)
+      console.warn(`[ensureOrg] tentative ${i + 1}:`, e)
     }
   }
   return null
@@ -57,11 +58,24 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const refreshOrg = async () => {
     const me = await fetchMe()
     if (me.org) setOrg(me.org)
+    else {
+      const fixed = await ensureOrg()
+      if (fixed) setOrg(fixed)
+    }
   }
 
   useEffect(() => {
-    fetchMe().then(me => {
-      if (me.user) { setUser(me.user); setOrg(me.org) }
+    fetchMe().then(async me => {
+      if (me.user) {
+        setUser(me.user)
+        if (me.org) {
+          setOrg(me.org)
+        } else {
+          // Org manquante — repair automatique au chargement
+          const fixed = await ensureOrg()
+          if (fixed) setOrg(fixed)
+        }
+      }
     }).finally(() => setLoading(false))
   }, [])
 
@@ -70,31 +84,31 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) return { error: error.message || 'Email ou mot de passe incorrect' }
     if (data?.user) {
       setUser({ id: data.user.id, email: data.user.email })
-      await sleep(300)
+      await sleep(400)
       const me = await fetchMe()
-      setOrg(me.org)
+      if (me.org) {
+        setOrg(me.org)
+      } else {
+        const fixed = await ensureOrg()
+        if (fixed) setOrg(fixed)
+      }
     }
     return { error: null }
   }
 
   const signUp = async (email: string, password: string, orgName: string) => {
     try {
-      const { error } = await (authClient as any).signUp.email({
-        email, password, name: orgName,
-      })
+      const { error } = await (authClient as any).signUp.email({ email, password, name: orgName })
       if (error) return { error: error.message }
 
-      // Connexion
-      await sleep(300)
+      await sleep(400)
       const { data, error: signInError } = await (authClient as any).signIn.email({ email, password })
       if (signInError) return { error: signInError.message }
       if (data?.user) setUser({ id: data.user.id, email: data.user.email })
 
-      // Créer org avec retry
       await sleep(500)
-      const newOrg = await createOrg(orgName)
+      const newOrg = await ensureOrg(orgName)
       if (newOrg) setOrg(newOrg)
-      else console.error('[signUp] org non créée après 4 tentatives')
 
       return { error: null }
     } catch (e: any) {
