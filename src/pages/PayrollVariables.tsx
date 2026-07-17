@@ -3,8 +3,7 @@ import { useParams, Link } from 'react-router-dom'
 import { payrollApi, employeesApi } from '../lib/api'
 import { useAuth } from '../context/AuthContext'
 import { calculatePayroll, formatXOF, MONTH_NAMES, PayrollInput, PayrollResult } from '../lib/payroll'
-import { generateBulletinPDF } from '../lib/pdf'
-import { ArrowLeft, Calculator, FileText, Save, Lock, Loader2, Search, Info } from 'lucide-react'
+import { ArrowLeft, Calculator, FileText, Save, Lock, Loader2, Search, Info, Download } from 'lucide-react'
 
 interface Employee { id: string; first_name: string; last_name: string; matricule: string|null; position: string|null; category: string|null; marital_status: string; children_count: number; client_id: string; email: string|null; phone: string|null; social_security_number: string|null; hire_date: string|null; client_name?: string }
 
@@ -62,23 +61,56 @@ export default function PayrollVariables() {
     setCalculating(false)
   }
 
-  const handleSave = async () => {
-    if (!selectedEmpId || !periodId || !result) return
-    setSaving(true)
-    try {
-      const payload = { ...form, ...result, employee_id: selectedEmpId, period_id: periodId, status: 'calculated', calculated_at: new Date().toISOString() }
-      const saved = await payrollApi.saveVariables(payload)
-      const newMap = new Map(variables)
-      newMap.set(selectedEmpId, saved)
-      setVariables(newMap)
-    } catch {} finally { setSaving(false) }
+  const saveVariables = async () => {
+    if (!selectedEmpId || !periodId) return
+    const payload = {
+      employee_id: selectedEmpId,
+      period_id: periodId,
+      base_salary: form.base_salary || 0,
+      sursalaire: form.overtime_premium || 0,
+      indemnite_grossesse: form.pregnancy_allowance || 0,
+      indemnite_fonction: form.function_allowance || 0,
+      indemnite_communication: form.communication_allowance || 0,
+      indemnite_logement: form.housing_premium || 0,
+      indemnite_repas: form.meal_premium || 0,
+      indemnite_transport: form.transport_allowance || 0,
+      avance_salaire: form.salary_advance || 0,
+      remboursement_pret: form.loan_payment || 0,
+      deduction_forfaitaire: form.flat_deduction || 0,
+    }
+    const saved = await payrollApi.saveVariables(payload)
+    const newMap = new Map(variables)
+    newMap.set(selectedEmpId, saved)
+    setVariables(newMap)
+    return saved
   }
 
-  const handleGeneratePDF = async () => {
-    if (!selectedEmpId || !result || !period) return
-    const emp = employees.find(e => e.id === selectedEmpId)
-    if (!emp) return
-    await generateBulletinPDF({ employee: emp, period, variables: form, result, orgName: org?.name || '' })
+  const handleSave = async () => {
+    if (!selectedEmpId || !periodId) return
+    setSaving(true)
+    try { await saveVariables() } catch(e: any) { alert(e.message) } finally { setSaving(false) }
+  }
+
+  const handleDownloadXlsx = async () => {
+    if (!selectedEmpId || !periodId) return
+    setSaving(true)
+    try {
+      // Sauvegarder d'abord les variables
+      await saveVariables()
+      // Puis télécharger
+      const res = await fetch('/api/export-bulletin', {
+        method: 'POST', credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ period_id: periodId, employee_id: selectedEmpId }),
+      })
+      if (!res.ok) { const e = await res.json().catch(()=>({error:'Erreur'})); alert(e.error); return }
+      const blob = await res.blob()
+      const emp = employees.find(e => e.id === selectedEmpId)
+      const a = document.createElement('a')
+      a.href = URL.createObjectURL(blob)
+      a.download = `Bulletin_${emp?.last_name||'employe'}_${period?.period_month}_${period?.period_year}.xlsx`
+      a.click()
+    } catch(e: any) { alert(e.message) } finally { setSaving(false) }
   }
 
   const handleClosePeriod = async () => {
@@ -167,11 +199,11 @@ export default function PayrollVariables() {
                   <button onClick={handleCalculate} disabled={isClosed||calculating} className="btn-primary">
                     {calculating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Calculator className="w-4 h-4" />} Calculer
                   </button>
-                  <button onClick={handleSave} disabled={isClosed||!result||saving} className="btn-secondary">
+                  <button onClick={handleSave} disabled={isClosed||saving} className="btn-secondary">
                     {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Save className="w-4 h-4" />} Enregistrer
                   </button>
-                  <button onClick={handleGeneratePDF} disabled={!result||isClosed} className="btn-ghost text-primary-600 hover:bg-primary-50">
-                    <FileText className="w-4 h-4" /> Bulletin PDF
+                  <button onClick={handleDownloadXlsx} disabled={isClosed||saving} className="btn-ghost text-green-600 hover:bg-green-50">
+                    {saving ? <Loader2 className="w-4 h-4 animate-spin" /> : <Download className="w-4 h-4" />} Bulletin xlsx
                   </button>
                 </div>
               </div>

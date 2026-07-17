@@ -106,6 +106,14 @@ function genBulletin(wb, sheetName, data) {
   const ws = wb.addWorksheet(sheetName)
   ws.columns = [{ key:'A',width:18.29 },{ key:'B',width:35 },{ key:'C',width:10.57 },{ key:'D',width:8.86 },{ key:'E',width:9.29 },{ key:'F',width:11.43 }]
   ws.pageSetup = { orientation:'portrait', paperSize:9, margins:{ left:0.7,right:0.7,top:0.75,bottom:0.75 } }
+  // Logo client — ancre A1:B9 (387x198px) comme original DVV
+  if (data.logoBuffer) {
+    try {
+      const ext = 'png'
+      const imgId = wb.addImage({ buffer: data.logoBuffer, extension: ext })
+      ws.addImage(imgId, { tl: { col: 0, row: 0 }, br: { col: 1, row: 9 } })
+    } catch(e) { /* logo non critique */ }
+  }
   ws.mergeCells('A13:B13'); ws.mergeCells('A17:B17'); ws.mergeCells('D11:F11'); ws.getRow(11).height=20.25
   const infos = [['A18',' Nom & Prénoms : ','B18',data.nom,true],['A19','N°Assuré :','B19',data.n_assure,false],['A20','NIF:','B20',data.nif,false],['A21','Direction/section:','B21',data.direction,true],['A22','Poste/Fonction: ','B22',data.poste,true],['A23','Téléphone:','B23',data.telephone,true],['A24'," Date d'embauche: ",'B24',data.date_embauche,false],['A25',' Pers à charge ','B25',data.personnes_charge,false]]
   for (const [ca,la,cb,vb,bold] of infos) {
@@ -199,59 +207,123 @@ function genEtatCharges(wb, sheetName, title, employes, avecRegul) {
 
 function genSolde(wb, sheetName, data) {
   const ws = wb.addWorksheet(sheetName)
-  ws.getColumn(5).width=20; ws.getColumn(6).width=18; ws.getColumn(8).width=14.29
-  ws.mergeCells('B4:H5'); const t=ws.getCell('B4'); t.value=`   ${data.client_nom} : SOLDE DE TOUT COMPTE : ${data.nom}`; t.font=cal(20,true); t.alignment={horizontal:'center'}
-  for (const [row,txt,h] of [[6,`DEPART : ${data.depart}`,'left'],[7,`DATE D'EMBAUCHE :  ${data.date_embauche}`,'left'],[8,`FIN DE CONTRAT : ${data.fin_contrat}`,null],[9,`ANCIENNETE : ${data.anciennete_label}`,'left']]) {
-    ws.mergeCells(`B${row}:H${row}`); const c=ws.getCell(`B${row}`); c.value=txt; c.font=cal(14,true); if(h)c.alignment={horizontal:h}
+  // Largeurs exactes originales
+  ws.getColumn(5).width=20; ws.getColumn(6).width=18; ws.getColumn(8).width=14.285
+  // Hauteurs exactes originales
+  ws.getRow(4).height=21; ws.getRow(5).height=35.25; ws.getRow(6).height=32.25
+  ws.getRow(7).height=36.75; ws.getRow(8).height=34.5; ws.getRow(9).height=33.75
+  ws.getRow(10).height=21.75; ws.getRow(11).height=21.75; ws.getRow(12).height=28.5
+  ws.getRow(13).height=27.75; ws.getRow(14).height=29.25; ws.getRow(15).height=29.25
+  ws.getRow(16).height=29.25; ws.getRow(17).height=27; ws.getRow(18).height=28.5
+  ws.getRow(19).height=28.5; ws.getRow(20).height=25.5; ws.getRow(21).height=29.25
+
+  // B4:H5 titre
+  ws.mergeCells('B4:H5')
+  const t=ws.getCell('B4'); t.value=`   ${data.client_nom} : SOLDE DE TOUT COMPTE : ${data.nom}`
+  t.font=cal(20,true); t.alignment={horizontal:'center',vertical:'center'}
+
+  // B6:H6..B9:H9 — fusions B:H exactes comme original
+  const infoRows = [
+    [6, `DEPART : ${data.depart}                              `, 'left'],
+    [7, `DATE D'EMBAUCHE :  ${data.date_embauche}`, 'left'],
+    [8, `FIN DE CONTRAT : ${data.fin_contrat}                            `, null],
+    [9, `ANCIENNETE : ${data.anciennete_label}`, 'left'],
+  ]
+  for (const [row,txt,h] of infoRows) {
+    ws.mergeCells(`B${row}:H${row}`)
+    const c=ws.getCell(`B${row}`); c.value=txt; c.font=cal(14,true)
+    c.alignment={horizontal:h||undefined, vertical:'center'}
   }
-  ws.mergeCells('F10:H10'); ws.getCell('F10').value='CALCUL'; ws.getCell('F10').font=cal(16,false); ws.getCell('F10').alignment={horizontal:'center'}
-  for (const [addr,v] of [['F11','BASE'],['G11','TAUX'],['H11','MONTANT']]) { ws.getCell(addr).value=v; ws.getCell(addr).font=cal(16,false); ws.getCell(addr).alignment={horizontal:'center'} }
-  ws.mergeCells('B12:E12'); ws.getCell('B12').value=`\u00a0 ${data.salaire_mois_label} `; ws.getCell('B12').font=cal(16,false); ws.getCell('B12').alignment={horizontal:'left'}
-  ws.getCell('H12').value=String(data.salaire_mois||0); ws.getCell('H12').font=cal(16,false); ws.getCell('H12').numFmt='#,##0'
-  ws.mergeCells('B13:E13'); ws.getCell('B13').value='INDEMNITE DE CONGES ACQUIS NON JOUIR '; ws.getCell('B13').font=cal(16,false); ws.getCell('B13').alignment={horizontal:'left'}
-  ws.getCell('F13').value=String(data.base_conges||0); ws.getCell('F13').font=cal(16,false)
+
+  // F10:H10 CALCUL
+  ws.mergeCells('F10:H10')
+  ws.getCell('F10').value='CALCUL'; ws.getCell('F10').font=cal(16,false); ws.getCell('F10').alignment={horizontal:'center',vertical:'center'}
+  for (const [a,v] of [['F11','BASE'],['G11','TAUX'],['H11','MONTANT']]) {
+    ws.getCell(a).value=v; ws.getCell(a).font=cal(16,false); ws.getCell(a).alignment={horizontal:'center',vertical:'center'}
+  }
+
+  // B12:E12 Salaire mois — FUSION B:E comme original
+  ws.mergeCells('B12:E12')
+  ws.getCell('B12').value=`\u00a0 ${data.salaire_mois_label} `; ws.getCell('B12').font=cal(16,false); ws.getCell('B12').alignment={horizontal:'left',vertical:'center'}
+  ws.getCell('H12').value=data.salaire_mois||0; ws.getCell('H12').font=cal(16,false); ws.getCell('H12').alignment={vertical:'center'}; ws.getCell('H12').numFmt='#,##0'
+
+  // B13:E13 Congés — FUSION B:E
+  ws.mergeCells('B13:E13')
+  ws.getCell('B13').value='INDEMNITE DE CONGES ACQUIS NON JOUIR '; ws.getCell('B13').font=cal(16,false); ws.getCell('B13').alignment={horizontal:'left',vertical:'center'}
+  ws.getCell('F13').value=data.base_conges||0; ws.getCell('F13').font=cal(16,false); ws.getCell('F13').alignment={horizontal:'left',vertical:'center'}; ws.getCell('F13').numFmt='#,##0'
   const jours=data.jours_conges_list||[]
   if (data.taux_conges_auto && jours.length) ws.getCell('G13').value={formula:`(${jours.map(([j])=>j).join('+')})/30`}
-  else ws.getCell('G13').value=String(data.taux_conges_manuel||0)
-  ws.getCell('G13').font=cal(16,false); ws.getCell('G13').alignment={horizontal:'center'}
-  ws.getCell('H13').value={formula:'F13*G13'}; ws.getCell('H13').numFmt='#,##0.00'
-  ws.mergeCells('B14:E14'); ws.getCell('B14').value=' TOTAL BRUT SOLDE DE TOUT COMPTE'; ws.getCell('B14').font=cal(16,true); ws.getCell('B14').alignment={horizontal:'left'}
-  ws.getCell('H14').value={formula:'+H12+H13'}; ws.getCell('H14').numFmt='#,##0.00'
-  for (const [r,label,base,taux] of [[15,'CNSS','=(H14-140000)','0.04'],[16,'AMU','=(H14-140000)','0.05']]) {
-    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value=label; ws.getCell(`B${r}`).font=cal(16,false)
-    ws.getCell(`F${r}`).value=base; ws.getCell(`F${r}`).font=cal(16,true); ws.getCell(`F${r}`).alignment={horizontal:'center'}
-    ws.getCell(`G${r}`).value=taux; ws.getCell(`G${r}`).font=cal(16,false); ws.getCell(`G${r}`).alignment={horizontal:'center'}
-    ws.getCell(`H${r}`).value={formula:`+F${r}*G${r}`}; ws.getCell(`H${r}`).font=cal(16,false); ws.getCell(`H${r}`).numFmt='#,##0'
-  }
-  ws.mergeCells('B17:E17'); ws.getCell('B17').value='IRPP'; ws.getCell('B17').font=cal(16,false)
-  ws.getCell('H17').value=data.irpp||0; ws.getCell('H17').numFmt='#,##0'
+  else ws.getCell('G13').value=data.taux_conges_manuel||0
+  ws.getCell('G13').font=cal(16,false); ws.getCell('G13').alignment={horizontal:'center',vertical:'center'}
+  ws.getCell('H13').value={formula:'F13*G13'}; ws.getCell('H13').font=cal(16,false); ws.getCell('H13').alignment={vertical:'center'}; ws.getCell('H13').numFmt='#,##0.00'
+
+  // B14:E14 Total brut — FUSION B:E
+  ws.mergeCells('B14:E14')
+  ws.getCell('B14').value=' TOTAL BRUT SOLDE DE TOUT COMPTE'; ws.getCell('B14').font=cal(16,true); ws.getCell('B14').alignment={horizontal:'left',vertical:'center'}
+  ws.getCell('H14').value={formula:'H12+H13'}; ws.getCell('H14').font=cal(16,false); ws.getCell('H14').alignment={vertical:'center'}; ws.getCell('H14').numFmt='#,##0.00'
+
+  // B15:E15 CNSS — FUSION B:E, F15='=(H14-140000)' bold, G15='0.04' text
+  ws.mergeCells('B15:E15')
+  ws.getCell('B15').value='CNSS'; ws.getCell('B15').font=cal(16,false); ws.getCell('B15').alignment={horizontal:'left',vertical:'center'}
+  ws.getCell('F15').value={formula:'H14-140000'}; ws.getCell('F15').font=cal(16,true); ws.getCell('F15').alignment={horizontal:'center',vertical:'center'}; ws.getCell('F15').numFmt='#,##0'
+  ws.getCell('G15').value=0.04; ws.getCell('G15').font=cal(16,false); ws.getCell('G15').alignment={horizontal:'center',vertical:'center'}; ws.getCell('G15').numFmt='0%'
+  ws.getCell('H15').value={formula:'F15*G15'}; ws.getCell('H15').font=cal(16,false); ws.getCell('H15').alignment={vertical:'center'}; ws.getCell('H15').numFmt='#,##0'
+
+  // B16:E16 AMU — FUSION B:E
+  ws.mergeCells('B16:E16')
+  ws.getCell('B16').value='AMU'; ws.getCell('B16').font=cal(16,false); ws.getCell('B16').alignment={horizontal:'left',vertical:'center'}
+  ws.getCell('F16').value={formula:'H14-140000'}; ws.getCell('F16').font=cal(16,true); ws.getCell('F16').alignment={horizontal:'center',vertical:'center'}; ws.getCell('F16').numFmt='#,##0'
+  ws.getCell('G16').value=0.05; ws.getCell('G16').font=cal(16,false); ws.getCell('G16').alignment={horizontal:'center',vertical:'center'}; ws.getCell('G16').numFmt='0%'
+  ws.getCell('H16').value={formula:'F16*G16'}; ws.getCell('H16').font=cal(16,false); ws.getCell('H16').alignment={horizontal:'right',vertical:'center'}; ws.getCell('H16').numFmt='#,##0'
+
+  // B17:E17 IRPP — FUSION B:E
+  ws.mergeCells('B17:E17')
+  ws.getCell('B17').value='IRPP'; ws.getCell('B17').font=cal(16,false); ws.getCell('B17').alignment={horizontal:'left',vertical:'center'}
+  ws.getCell('H17').value=data.irpp||0; ws.getCell('H17').font=cal(16,false); ws.getCell('H17').alignment={vertical:'center'}; ws.getCell('H17').numFmt='#,##0'
+
   let r=18
   if (data.retenues_arrierees) {
-    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='TOTAL RETENUES ARRIEREES RESTANT A PRELEVE'; ws.getCell(`B${r}`).font=cal(16,false)
-    ws.getCell(`H${r}`).value=data.retenues_arrierees; ws.getCell(`H${r}`).numFmt='#,##0'; r++
-    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='TOTAL DES RETENUES'; ws.getCell(`B${r}`).font=cal(16,true)
-    ws.getCell(`H${r}`).value={formula:`H15+H16+H17+H${r-1}`}; ws.getCell(`H${r}`).numFmt='#,##0'
+    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='TOTAL RETENUES ARRIEREES RESTANT A PRELEVE'; ws.getCell(`B${r}`).font=cal(16,false); ws.getCell(`B${r}`).alignment={vertical:'center'}
+    ws.getCell(`H${r}`).value=data.retenues_arrierees; ws.getCell(`H${r}`).font=cal(16,false); ws.getCell(`H${r}`).numFmt='#,##0'; r++
+    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='TOTAL DES RETENUES'; ws.getCell(`B${r}`).font=cal(16,true); ws.getCell(`B${r}`).alignment={vertical:'center'}
+    ws.getCell(`H${r}`).value={formula:`H15+H16+H17+H${r-1}`}; ws.getCell(`H${r}`).font=cal(16,true); ws.getCell(`H${r}`).alignment={vertical:'center'}; ws.getCell(`H${r}`).numFmt='#,##0'
   } else {
-    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='TOTAL DES RETENUES'; ws.getCell(`B${r}`).font=cal(16,true)
-    ws.getCell(`H${r}`).value={formula:'H15+H16+H17'}; ws.getCell(`H${r}`).numFmt='#,##0'
+    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='TOTAL DES RETENUES'; ws.getCell(`B${r}`).font=cal(16,true); ws.getCell(`B${r}`).alignment={vertical:'center'}
+    ws.getCell(`H${r}`).value={formula:'H15+H16+H17'}; ws.getCell(`H${r}`).font=cal(16,true); ws.getCell(`H${r}`).alignment={vertical:'center'}; ws.getCell(`H${r}`).numFmt='#,##0'
   }
   const totR=r; r++
-  ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='SALAIRE NET SOLDE DE TOUT COMPTE'; ws.getCell(`B${r}`).font=cal(16,true)
-  ws.getCell(`H${r}`).value={formula:`H14-H${totR}`}; ws.getCell(`H${r}`).numFmt='#,##0'; const netR=r; r++
+
+  ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='SALAIRE NET SOLDE DE TOUT COMPTE'; ws.getCell(`B${r}`).font=cal(16,true); ws.getCell(`B${r}`).alignment={vertical:'center'}
+  ws.getCell(`H${r}`).value={formula:`H14-H${totR}`}; ws.getCell(`H${r}`).font=cal(16,true); ws.getCell(`H${r}`).alignment={vertical:'center'}; ws.getCell(`H${r}`).numFmt='#,##0'
+  const netR=r; r++
+
   if (data.inclure_preavis) {
-    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='MONTANT DU PREAVIS'; ws.getCell(`B${r}`).font=cal(16,true)
-    ws.getCell(`H${r}`).value=data.preavis||0; ws.getCell(`H${r}`).numFmt='#,##0'; const preR=r; r++
-    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='AVANCE SUR SOLDE DE TOUT COMPTE'; ws.getCell(`B${r}`).font=cal(16,true)
-    ws.getCell(`H${r}`).value=data.avance||0; ws.getCell(`H${r}`).numFmt='#,##0'; const avR=r; r++
-    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='NET A PAYER'; ws.getCell(`B${r}`).font=cal(16,true)
-    ws.getCell(`H${r}`).value={formula:`H${netR}-H${preR}-H${avR}`}; ws.getCell(`H${r}`).numFmt='#,##0'
+    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='MONTANT DU PREAVIS'; ws.getCell(`B${r}`).font=cal(16,true); ws.getCell(`B${r}`).alignment={vertical:'center'}
+    ws.getCell(`H${r}`).value=data.preavis||0; ws.getCell(`H${r}`).font=cal(16,true); ws.getCell(`H${r}`).numFmt='#,##0'; const preR=r; r++
+    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='AVANCE SUR SOLDE DE TOUT COMPTE'; ws.getCell(`B${r}`).font=cal(16,true); ws.getCell(`B${r}`).alignment={vertical:'center'}
+    ws.getCell(`H${r}`).value=data.avance||0; ws.getCell(`H${r}`).font=cal(16,true); ws.getCell(`H${r}`).numFmt='#,##0'; const avR=r; r++
+    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='NET A PAYER'; ws.getCell(`B${r}`).font=cal(16,true); ws.getCell(`B${r}`).alignment={vertical:'center'}
+    ws.getCell(`H${r}`).value={formula:`H${netR}-H${preR}-H${avR}`}; ws.getCell(`H${r}`).font=cal(16,true); ws.getCell(`H${r}`).alignment={vertical:'center'}; ws.getCell(`H${r}`).numFmt='#,##0'
   } else {
-    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='AVANCE SUR SOLDE DE TOUT COMPTE'; ws.getCell(`B${r}`).font=cal(16,true)
-    ws.getCell(`H${r}`).value=data.avance||0; ws.getCell(`H${r}`).numFmt='#,##0'; const avR=r; r++
-    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='NET A PAYER'; ws.getCell(`B${r}`).font=cal(16,true)
-    ws.getCell(`H${r}`).value={formula:`H${netR}-H${avR}`}; ws.getCell(`H${r}`).numFmt='#,##0'
+    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='AVANCE SUR SOLDE DE TOUT COMPTE'; ws.getCell(`B${r}`).font=cal(16,true); ws.getCell(`B${r}`).alignment={vertical:'center'}
+    ws.getCell(`H${r}`).value=data.avance||0; ws.getCell(`H${r}`).font=cal(16,true); ws.getCell(`H${r}`).numFmt='#,##0'; const avR=r; r++
+    ws.mergeCells(`B${r}:E${r}`); ws.getCell(`B${r}`).value='NET A PAYER'; ws.getCell(`B${r}`).font=cal(16,true); ws.getCell(`B${r}`).alignment={vertical:'center'}
+    ws.getCell(`H${r}`).value={formula:`H${netR}-H${avR}`}; ws.getCell(`H${r}`).font=cal(16,true); ws.getCell(`H${r}`).alignment={vertical:'center'}; ws.getCell(`H${r}`).numFmt='#,##0'
   }
-  if (jours.length) { ws.getCell(`B${r+3}`).value=`TAUX DE CONGES ACQUIS NON JOUIR= (${jours.map(([j,l])=>`${j} jours (${l})`).join(' + ')}) / 30 jours`; ws.getCell(`B${r+3}`).font=cal(12,true) }
+
+  // Notes congés — exactement comme original
+  if (jours.length) {
+    const note_r = r+3
+    ws.getRow(note_r).height=15.75
+    ws.getRow(note_r+2).height=15.75
+    ws.getRow(note_r+4).height=15.75
+    const total_j_str = jours.map(([j,l])=>`${j} jours`).join(' + ')
+    ws.getCell(`B${note_r}`).value=`TAUX DE CONGES ACQUIS NON JOUIR= (${total_j_str}) / 30 jours`; ws.getCell(`B${note_r}`).font=cal(12,true)
+    jours.forEach(([j,l], i) => {
+      const nr = note_r+2+(i*2)
+      ws.getCell(`B${nr}`).value=`${j} jours= ${l}`; ws.getCell(`B${nr}`).font=cal(12,true)
+    })
+  }
 }
 
 // ─── ROUTER PRINCIPAL ─────────────────────────────────────────────────────────
@@ -277,8 +349,8 @@ export default async function handler(req, res) {
       const { period_id, employee_id } = req.body
       if (!period_id || !employee_id) return res.status(400).json({ error: 'period_id et employee_id requis' })
       const db = neon(process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL)
-      const rows = await db`SELECT pv.*,e.first_name,e.last_name,e.position,e.social_security_number,e.hire_date,e.phone,e.children_count,e.marital_status,e.category,c.name as client_name,c.nif as client_nif,c.num_employeur,pp.period_month,pp.period_year FROM payroll_variables pv JOIN employees e ON e.id=pv.employee_id JOIN payroll_periods pp ON pp.id=pv.period_id JOIN clients c ON c.id=pp.client_id WHERE pv.period_id=${period_id} AND pv.employee_id=${employee_id}`
-      if (!rows.length) return res.status(404).json({ error: 'Variables introuvables' })
+      const rows = await db`SELECT pv.*,e.first_name,e.last_name,e.position,e.social_security_number,e.hire_date,e.phone,e.children_count,e.marital_status,e.category,c.name as client_name,c.nif as client_nif,c.num_employeur,c.logo_url,pp.period_month,pp.period_year FROM payroll_variables pv JOIN employees e ON e.id=pv.employee_id JOIN payroll_periods pp ON pp.id=pv.period_id JOIN clients c ON c.id=pp.client_id WHERE pv.period_id=${period_id} AND pv.employee_id=${employee_id}`
+      if (!rows.length) return res.status(404).json({ error: 'Variables de paie introuvables. Veuillez saisir et enregistrer les variables dans la période de paie avant de générer le bulletin.' })
       const v=rows[0]
       const mois_noms=['JANVIER','FEVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOUT','SEPTEMBRE','OCTOBRE','NOVEMBRE','DECEMBRE']
       const mois=mois_noms[(v.period_month||1)-1]
@@ -293,8 +365,22 @@ export default async function handler(req, res) {
       if(v.indemnite_repas) rubriques.push({label:'Indemnité de repas',base:v.indemnite_repas,taux_ou_nb:30})
       if(v.indemnite_communication) rubriques.push({label:'Indemnité de communication',base:v.indemnite_communication,taux_ou_nb:30})
       if(v.indemnite_grossesse) rubriques.push({label:'Indemnité de grossesse',base:v.indemnite_grossesse,taux_ou_nb:30})
+      // Télécharger le logo client si disponible
+      let logoBuffer=null
+      if(v.logo_url){try{const lr=await fetch(v.logo_url);if(lr.ok)logoBuffer=Buffer.from(await lr.arrayBuffer())}catch{}}
       const wb2=new ExcelJS.Workbook()
-      genBulletin(wb2,`${(v.last_name||'').substring(0,3)} ${mois.substring(0,4)} ${v.period_year}`,{nom:`${v.last_name} ${v.first_name}`,n_assure:v.social_security_number||'',nif:v.client_nif||'',direction:v.category||'',poste:v.position||'',telephone:v.phone||'',date_embauche:v.hire_date?new Date(v.hire_date).toLocaleDateString('fr-FR'):'',personnes_charge:pers,rubriques,avance_salaire:v.avance_salaire||0,irpp,irpp_base:Math.floor((brut*0.91-Math.min(brut*0.91*12,10_000_000)*0.28/12-pers*10_000)/1000)*1000})
+      // Fetch logo
+      let logoBuffer = null
+      if (v.logo_url) {
+        try {
+          const logoRes = await fetch(v.logo_url)
+          if (logoRes.ok) {
+            const ab = await logoRes.arrayBuffer()
+            logoBuffer = Buffer.from(ab)
+          }
+        } catch(e) { /* logo non critique */ }
+      }
+      genBulletin(wb2,`${(v.last_name||'').substring(0,3)} ${mois.substring(0,4)} ${v.period_year}`,{nom:`${v.last_name} ${v.first_name}`,n_assure:v.social_security_number||'',nif:v.client_nif||'',direction:v.category||'',poste:v.position||'',telephone:v.phone||'',date_embauche:v.hire_date?new Date(v.hire_date).toLocaleDateString('fr-FR'):'',personnes_charge:pers,rubriques,avance_salaire:v.avance_salaire||0,irpp,irpp_base:Math.floor((brut*0.91-Math.min(brut*0.91*12,10_000_000)*0.28/12-pers*10_000)/1000)*1000,logoBuffer})
       res.setHeader('Content-Type','application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
       res.setHeader('Content-Disposition',`attachment; filename="Bulletin_${v.last_name}_${mois}_${v.period_year}.xlsx"`)
       await wb2.xlsx.write(res); return res.end()
@@ -306,7 +392,7 @@ export default async function handler(req, res) {
       const { period_id, avec_regularisation } = req.body
       const db = neon(process.env.DATABASE_URL || process.env.POSTGRES_PRISMA_URL)
       const rows = await db`SELECT pv.*,e.first_name,e.last_name,e.position,e.children_count,e.marital_status,e.responsable,e.pole,c.name as client_name,pp.period_month,pp.period_year FROM payroll_variables pv JOIN employees e ON e.id=pv.employee_id JOIN payroll_periods pp ON pp.id=pv.period_id JOIN clients c ON c.id=pp.client_id WHERE pv.period_id=${period_id} ORDER BY e.last_name`
-      if (!rows.length) return res.status(404).json({ error: 'Aucune donnée' })
+      if (!rows.length) return res.status(404).json({ error: 'Aucune variable de paie pour cette période. Allez dans Périodes de paie, saisissez les variables de chaque employé et cliquez Enregistrer avant de générer l\'état des charges.' })
       const p=rows[0]; const mois_noms=['JANVIER','FEVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOUT','SEPTEMBRE','OCTOBRE','NOVEMBRE','DECEMBRE']; const mois=mois_noms[(p.period_month||1)-1]
       const employes=rows.map(v=>{const brut=calcBrut(v);const pers=calcPersonnesCharge(v.marital_status,v.children_count);const irpp=calcIrppMensuel(brut,pers);const net=brut-Math.round(brut*0.04)-Math.round(brut*0.05)-irpp-(v.avance_salaire||0)-(v.remboursement_pret||0)-(v.deduction_forfaitaire||0);return{nom:`${v.last_name} ${v.first_name}`,responsable:v.responsable||'',poste:v.position||'',pole:v.pole||'',brut_imposable:brut,irpp,net_payer:Math.round(net),regularisation_irpp:v.regularisation_irpp||0}})
       const wb2=new ExcelJS.Workbook()
