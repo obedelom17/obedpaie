@@ -145,6 +145,10 @@ export default function Employees() {
                 <div><label className="label">Catégorie</label><input value={form.category} onChange={e => setForm({...form, category: e.target.value})} className="input" /></div>
               </div>
               <div className="grid grid-cols-2 gap-4">
+                <div><label className="label">Pôle</label><input value={(form as any).pole||''} onChange={e => setForm({...form, pole: e.target.value} as any)} className="input" placeholder="Ex: ADMIN, RH, FINANCE" /></div>
+                <div><label className="label">Responsable</label><input value={(form as any).responsable||''} onChange={e => setForm({...form, responsable: e.target.value} as any)} className="input" placeholder="Nom du responsable" /></div>
+              </div>
+              <div className="grid grid-cols-2 gap-4">
                 <div><label className="label">Situation matrimoniale</label>
                   <select value={form.marital_status} onChange={e => setForm({...form, marital_status: e.target.value})} className="input">
                     <option value="celibataire">Célibataire</option>

@@ -1,5 +1,11 @@
 const BASE = '/api'
 
+export async function apiFetch(url: string, opts?: RequestInit) {
+  const res = await fetch(url, { credentials: 'include', ...opts })
+  if (!res.ok) throw new Error(`HTTP ${res.status}`)
+  return res.json()
+}
+
 async function request<T>(method: string, path: string, body?: unknown): Promise<T> {
   const res = await fetch(`${BASE}${path}`, {
     method,

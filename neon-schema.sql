@@ -45,6 +45,8 @@ CREATE TABLE IF NOT EXISTS employees (
   last_name TEXT NOT NULL,
   matricule TEXT,
   position TEXT,
+  pole TEXT,
+  responsable TEXT,
   category TEXT,
   marital_status TEXT,
   children_count INTEGER DEFAULT 0,
