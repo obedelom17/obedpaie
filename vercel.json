@@ -5,6 +5,62 @@
       "destination": "/api/neon-auth-proxy"
     },
     {
+      "source": "/api/auth/me",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/auth/repair-org",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/auth/signup-org",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/auth/debug",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/clients",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/employees",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/payroll",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/payroll-variables",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/salary-grids",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/activity",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/upload-logo",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/export-bulletin",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/export-etat-charges",
+      "destination": "/api/index"
+    },
+    {
+      "source": "/api/export-solde",
+      "destination": "/api/index"
+    },
+    {
       "source": "/((?!api|_next|favicon|icon|manifest|assets|og-image|apple-touch-icon).*)",
       "destination": "/index.html"
     }
