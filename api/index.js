@@ -366,7 +366,10 @@ function genSolde(wb, sheetName, data) {
 
 // ─── ROUTER PRINCIPAL ─────────────────────────────────────────────────────────
 export default async function handler(req, res) {
-  const path = req.url.split('?')[0].replace(/\/+$/, '')
+  // Vercel rewrite passe le chemin original via ?_path=
+  const urlObj = new URL(req.url, 'http://x')
+  const _path = urlObj.searchParams.get('_path') || ''
+  const path = _path ? `/api/${_path}`.replace(/\/+$/, '') : req.url.split('?')[0].replace(/\/+$/, '')
   const method = req.method
 
   // CORS
@@ -461,7 +464,9 @@ export default async function handler(req, res) {
 
     // ── Données CRUD ──
     const auth = await requireAuth(req)
-    const qp = Object.fromEntries(new URL(req.url, 'http://x').searchParams)
+    const _urlObj = new URL(req.url, 'http://x')
+    _urlObj.searchParams.delete('_path')
+    const qp = Object.fromEntries(_urlObj.searchParams)
 
     if (path === '/api/clients') {
       const id = qp.id
