@@ -169,72 +169,117 @@ function sc(ws, addr, val, font, align, border, numFmt) {
 // ─── BULLETIN DE PAIE ─────────────────────────────────────────────────────────
 function genBulletin(wb, sheetName, data) {
   const ws = wb.addWorksheet(sheetName)
-  // Largeurs colonnes
-  ws.getColumn(1).width = 18.29  // A
-  ws.getColumn(2).width = 35.0   // B
-  ws.getColumn(3).width = 10.57  // C
-  ws.getColumn(4).width = 8.86   // D
-  ws.getColumn(5).width = 9.29   // E
-  ws.getColumn(6).width = 11.43  // F
+  // Largeurs colonnes exactes du DVV original
+  ws.getColumn(1).width = 18.285
+  ws.getColumn(2).width = 35.0
+  ws.getColumn(3).width = 10.57
+  ws.getColumn(4).width = 8.855
+  ws.getColumn(5).width = 9.285
+  ws.getColumn(6).width = 11.425
   ws.pageSetup.orientation = 'portrait'
   ws.pageSetup.paperSize = 9
   ws.pageSetup.fitToPage = true
   ws.pageSetup.fitToWidth = 1
   ws.pageSetup.fitToHeight = 0
 
-  // Logo client - détection du format
+  // ── HEADER : Logo + BULLETIN DE PAIE ──────────────────────────────────────
+  // Logo client (col A-B, lignes 1-9)
   if (data.logoBuffer && data.logoBuffer.length > 4) {
     try {
-      // Détecter format par magic bytes
-      let extension = 'png'
       const b = data.logoBuffer
+      let extension = 'png'
       if (b[0] === 0xFF && b[1] === 0xD8) extension = 'jpeg'
       else if (b[0] === 0x47 && b[1] === 0x49) extension = 'gif'
-      else if (b[0] === 0x89 && b[1] === 0x50) extension = 'png'
-      else if (b[0] === 0x52 && b[1] === 0x49) extension = 'png' // WEBP/RIFF → skip
-      
-      // Ne pas insérer WEBP (non supporté par Excel)
       if (extension !== 'gif') {
         const imgId = wb.addImage({ buffer: data.logoBuffer, extension })
+        // Deux cellules anchor comme l'original: col 0-1, row 0-9
         ws.addImage(imgId, {
-          tl: { col: 0, row: 0 },
-          ext: { width: 150, height: 75 }
+          tl: { col: 0, row: 0, nativeColOff: 9525, nativeRowOff: 123826 },
+          br: { col: 1, row: 9, nativeColOff: 1628775, nativeRowOff: 152400 },
+          editAs: 'oneCell'
         })
       }
-    } catch {
-      // Logo invalide - continuer sans image
-    }
+    } catch {}
   }
 
-  ws.mergeCells('A13:B13')
-  ws.mergeCells('A17:B17')
-  ws.mergeCells('D11:F11')
+  // BULLETIN DE PAIE - box rouge (col C-F, rows 1-3)
+  ws.mergeCells('C2:F4')
+  const bpCell = ws.getCell('C2')
+  bpCell.value = 'BULLETIN DE PAIE'
+  bpCell.font = { name:'Calibri', size:18, bold:true, color:{argb:'FFC00000'} }
+  bpCell.alignment = { horizontal:'center', vertical:'center' }
+  bpCell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFD9D9D9'} }
+
+  // Période - box blanc (col C-F, rows 6-9)
+  const m = data.mois_label || ''
+  const annee = data.period_year || ''
+  const moisNum = String(data.period_month||1).padStart(2,'0')
+  ws.mergeCells('C6:F9')
+  const perCell = ws.getCell('C6')
+  perCell.value = `MOIS DE: ${m}\nPERIODE DU:  01/${moisNum}/${annee}              \n                   AU:  ${new Date(annee,data.period_month||1,0).getDate()}/${moisNum}/${annee}`
+  perCell.alignment = { horizontal:'left', vertical:'top', wrapText:true }
+  perCell.font = { name:'Calibri', size:12, bold:true }
+  perCell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF2F2F2'} }
+  perCell.border = { left:thin(), right:thin(), top:thin(), bottom:thin() }
+
+  // Ligne rouge séparatrice (row 5, col C-F)
+  ws.mergeCells('C5:F5')
+  const sepCell = ws.getCell('C5')
+  sepCell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFC00000'} }
+  ws.getRow(5).height = 6
+
+  // ── ENTITÉ - box bleu (rows 11-13) ────────────────────────────────────────
+  ws.mergeCells('A11:F13')
+  const entCell = ws.getCell('A11')
+  entCell.value = `Entité: ${data.client_name||''}
+${data.client_adresse||''}`
+  entCell.font = { name:'Calibri', size:14, bold:true, color:{argb:'FFFFFFFF'} }
+  entCell.alignment = { horizontal:'center', vertical:'middle', wrapText:true }
+  entCell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF1F3864'} }
+  entCell.border = { left:thin(), right:thin(), top:thin(), bottom:thin() }
   ws.getRow(11).height = 20.25
 
-  // Infos employé
+  // ── N° Employeur / NIF / TEL (rows 15-16) ─────────────────────────────────
+  ws.mergeCells('A15:F16')
+  const numCell = ws.getCell('A15')
+  numCell.value = `N° Employeur : ${data.num_employeur||''}      NIF : ${data.nif||''}
+TEL: ${data.telephone_client||''}`
+  numCell.font = { name:'Calibri', size:14, bold:true, color:{argb:'FFFFFFFF'} }
+  numCell.alignment = { horizontal:'center', vertical:'middle', wrapText:true }
+  numCell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF1F3864'} }
+  numCell.border = { left:thin(), right:thin(), top:thin(), bottom:thin() }
+
+  // ── Infos employé (rows 18-25) ─────────────────────────────────────────────
   const infos = [
-    ['A18', ' Nom & Prénoms : ',    'B18', data.nom,              true ],
-    ['A19', 'N°Assuré :',           'B19', data.n_assure,         false],
-    ['A20', 'NIF:',                 'B20', data.nif,              false],
-    ['A21', 'Direction/section:',   'B21', data.direction,        true ],
-    ['A22', 'Poste/Fonction: ',     'B22', data.poste,            true ],
-    ['A23', 'Téléphone:',           'B23', data.telephone,        true ],
-    ['A24', " Date d'embauche: ",   'B24', data.date_embauche,    false],
-    ['A25', ' Pers à charge ',      'B25', data.personnes_charge, false],
+    ['A18', ' Nom & Prénoms : ',   'B18', data.nom,              true ],
+    ['A19', 'N°Assuré :',          'B19', data.n_assure,         false],
+    ['A20', 'NIF:',                'B20', data.nif_employe,      false],
+    ['A21', 'Direction/section:',  'B21', data.direction,        true ],
+    ['A22', 'Poste/Fonction: ',    'B22', data.poste,            true ],
+    ['A23', 'Téléphone:',          'B23', data.telephone,        true ],
+    ['A24', " Date d'embauche: ",  'B24', data.date_embauche,    false],
+    ['A25', ' Pers à charge ',     'B25', data.personnes_charge, false],
   ]
   for (const [ca, la, cb, vb, bold] of infos) {
     sc(ws, ca, la, cg(10,true),  aln('right'),  { left: dbl() })
     sc(ws, cb, vb, cg(10, bold), aln('left'),   null)
   }
 
-  // En-têtes tableau
-  const hCols = ['A','B','C','D','E','F']
-  const hLabels = ['Code','Rubriques','Base','Taux/NB','Retenues','Gains']
+  // ── En-têtes tableau (row 26) ──────────────────────────────────────────────
+  const hCols   = ['A','B','C','D','E','F']
+  const hLabels  = ['Code','Rubriques','Base','Taux/NB','Retenues','Gains']
+  const hFill    = { type:'pattern', pattern:'solid', fgColor:{argb:'FFD9E1F2'} }
   for (let i=0; i<6; i++) {
-    const brd = i===0
+    const cell = ws.getCell(`${hCols[i]}26`)
+    cell.value     = hLabels[i]
+    cell.font      = cg(10,true)
+    cell.alignment = aln('center')
+    cell.fill      = hFill
+    cell.border    = i===0
       ? { left:dbl(), right:thin(), top:thin(), bottom:thin() }
-      : { left:thin(), right:thin(), top:thin(), bottom:thin() }
-    sc(ws, `${hCols[i]}26`, hLabels[i], cg(10,true), aln('center'), brd)
+      : i===5
+        ? { left:thin(), right:dbl(), top:thin(), bottom:thin() }
+        : { left:thin(), right:thin(), top:thin(), bottom:thin() }
   }
 
   // Rubriques dynamiques
@@ -567,6 +612,7 @@ export default async function handler(req, res) {
         SELECT pv.*, e.first_name, e.last_name, e.position, e.social_security_number,
                e.hire_date, e.phone, e.children_count, e.marital_status, e.category,
                c.name as client_name, c.nif as client_nif, c.num_employeur, c.logo_url,
+               c.bp, c.entite_name, c.phone as client_phone,
                pp.period_month, pp.period_year
         FROM payroll_variables pv
         JOIN employees e  ON e.id  = pv.employee_id
@@ -610,10 +656,12 @@ export default async function handler(req, res) {
       genBulletin(wb2, `${(v.last_name||'').substring(0,3)} ${mois.substring(0,4)} ${v.period_year}`, {
         nom: `${v.last_name} ${v.first_name}`,
         n_assure: v.social_security_number || '',
+        nif_employe: v.client_nif || '',
         nif: v.client_nif || '',
         direction: v.category || '',
         poste: v.position || '',
         telephone: v.phone || '',
+        telephone_client: v.client_phone || '',
         date_embauche: v.hire_date ? new Date(v.hire_date).toLocaleDateString('fr-FR') : '',
         personnes_charge: pers,
         rubriques,
@@ -621,6 +669,12 @@ export default async function handler(req, res) {
         irpp,
         irpp_base,
         logoBuffer,
+        client_name: v.client_name || '',
+        client_adresse: [v.bp, v.entite_name].filter(Boolean).join(' - '),
+        num_employeur: v.num_employeur || '',
+        mois_label: mois,
+        period_month: v.period_month,
+        period_year: v.period_year,
       })
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
       res.setHeader('Content-Disposition', `attachment; filename="Bulletin_${v.last_name}_${mois}_${v.period_year}.xlsx"`)
