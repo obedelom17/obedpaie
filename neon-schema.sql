@@ -4,17 +4,17 @@
 -- NOTE: Les tables neon_auth.* sont créées automatiquement par Neon Auth
 -- ============================================================
 
--- Table de liaison user (Neon Auth) → organisation
-CREATE TABLE IF NOT EXISTS user_profiles (
-  user_id TEXT PRIMARY KEY,  -- référence neon_auth.users_sync.id
-  organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
-  created_at TIMESTAMPTZ DEFAULT NOW()
-);
-
 -- Tables ElomPaie
 CREATE TABLE IF NOT EXISTS organizations (
   id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   name TEXT NOT NULL,
+  created_at TIMESTAMPTZ DEFAULT NOW()
+);
+
+-- Table de liaison user (Neon Auth) → organisation
+CREATE TABLE IF NOT EXISTS user_profiles (
+  user_id TEXT PRIMARY KEY,
+  organization_id UUID REFERENCES organizations(id) ON DELETE SET NULL,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 

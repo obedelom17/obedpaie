@@ -2,7 +2,7 @@
   "rewrites": [
     {
       "source": "/api/neon-auth/:path*",
-      "destination": "/api/neon-auth-proxy"
+      "destination": "/api/neon-auth-proxy?_subpath=:path*"
     },
     {
       "source": "/api/:path*",

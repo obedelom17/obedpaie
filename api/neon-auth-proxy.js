@@ -6,69 +6,67 @@ const APP_URL = process.env.BETTER_AUTH_URL || 'https://elompaie.vercel.app'
 export default async function handler(req, res) {
   if (!NEON_AUTH_BASE_URL) return res.status(500).json({ error: 'NEON_AUTH_BASE_URL non configuré' })
 
-  // Extraire le sous-chemin depuis ?_path= (rewrite Vercel) ou depuis req.url
+  // Vercel rewrite: /api/neon-auth/:path* → /api/neon-auth-proxy?_subpath=:path*
   const urlObj = new URL(req.url, 'http://x')
-  const _path = urlObj.searchParams.get('_path') || ''
-  let subpath
-  if (_path) {
-    // _path = "neon-auth/sign-in/email" → subpath = "/sign-in/email"
-    subpath = _path.replace(/^neon-auth/, '')
-    // Garder les query params originaux sans _path
-    urlObj.searchParams.delete('_path')
-    const qs = urlObj.search
-    if (qs && qs !== '?') subpath += qs
-  } else {
-    subpath = req.url.replace(/^\/api\/neon-auth/, '')
-  }
+  const subpathRaw = urlObj.searchParams.get('_subpath') || ''
+  const subpath = subpathRaw ? `/${subpathRaw}` : ''
+  const targetUrl = `${NEON_AUTH_BASE_URL}${subpath}`
 
-  const url = `${NEON_AUTH_BASE_URL}${subpath}`
-
+  // Parser le body (Vercel auto-parse JSON → req.body est déjà un objet)
   let body = undefined
   if (req.method !== 'GET' && req.method !== 'HEAD') {
-    const parsed = typeof req.body === 'string'
-      ? JSON.parse(req.body || '{}')
-      : (req.body || {})
-    if (!parsed.callbackURL) parsed.callbackURL = `${APP_URL}/`
+    let parsed = {}
+    try {
+      parsed = req.body && typeof req.body === 'object'
+        ? req.body
+        : JSON.parse(req.body || '{}')
+    } catch {}
+    // Ne pas injecter callbackURL - cela force redirect:true et perturbe le SDK
     body = JSON.stringify(parsed)
   }
 
   const headers = {
-    'origin': APP_URL,
-    'referer': `${APP_URL}/`,
+    'origin':       APP_URL,
+    'referer':      `${APP_URL}/`,
     'content-type': 'application/json',
   }
-  if (req.headers['cookie']) headers['cookie'] = req.headers['cookie']
+  if (req.headers['cookie'])        headers['cookie']        = req.headers['cookie']
   if (req.headers['authorization']) headers['authorization'] = req.headers['authorization']
 
   let upstreamRes
   try {
-    upstreamRes = await fetch(url, {
+    upstreamRes = await fetch(targetUrl, {
       method: req.method,
       headers,
       body,
       signal: AbortSignal.timeout(15000),
     })
   } catch (e) {
-    return res.status(502).json({ error: `Proxy error: ${e.message}` })
+    return res.status(502).json({ error: `Proxy network error: ${e.message}` })
   }
 
-  // Récupérer les Set-Cookie correctement (Node 18+ fetch)
-  const setCookies = typeof upstreamRes.headers.getSetCookie === 'function'
+  // ── Réécrire les Set-Cookie ──────────────────────────────────────────────
+  // Node 18+ fetch expose getSetCookie() pour gérer plusieurs cookies
+  const rawCookies = typeof upstreamRes.headers.getSetCookie === 'function'
     ? upstreamRes.headers.getSetCookie()
     : [upstreamRes.headers.get('set-cookie')].filter(Boolean)
 
-  // Réécrire les cookies pour notre domaine
-  const rewrittenCookies = setCookies.map(cookie =>
-    cookie
-      .replace(/Domain=[^;]+;?\s*/gi, '')
-      .replace(/SameSite=None/gi, 'SameSite=Lax')
-  )
+  const rewrittenCookies = rawCookies.map(cookie => {
+    // 1. Supprimer Domain= (pour que le cookie s'applique à elompaie.vercel.app)
+    cookie = cookie.replace(/;\s*Domain=[^;]*/gi, '')
+    // 2. SameSite=Lax (None requiert Secure mais cause des pb cross-origin)
+    cookie = cookie.replace(/SameSite=None/gi, 'SameSite=Lax')
+    // 3. Forcer Path=/ pour que le cookie soit envoyé à TOUS les endpoints /api/*
+    cookie = cookie.replace(/;\s*Path=[^;]*/gi, '')
+    cookie = cookie + '; Path=/'
+    return cookie
+  })
 
-  // Transmettre les headers (sauf set-cookie et hop-by-hop)
-  for (const [key, value] of upstreamRes.headers.entries()) {
-    const lk = key.toLowerCase()
-    if (['set-cookie', 'transfer-encoding', 'connection', 'content-encoding'].includes(lk)) continue
-    try { res.setHeader(key, value) } catch {}
+  // ── Transmettre les autres headers ───────────────────────────────────────
+  for (const [k, v] of upstreamRes.headers.entries()) {
+    const lk = k.toLowerCase()
+    if (['set-cookie','transfer-encoding','connection','content-encoding'].includes(lk)) continue
+    try { res.setHeader(k, v) } catch {}
   }
 
   if (rewrittenCookies.length > 0) {
@@ -76,6 +74,5 @@ export default async function handler(req, res) {
   }
 
   res.status(upstreamRes.status)
-  const respBody = await upstreamRes.text()
-  res.send(respBody)
+  res.send(await upstreamRes.text())
 }
