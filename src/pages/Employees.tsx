@@ -1,111 +1,159 @@
-import { useEffect, useState } from 'react'
-import { Link } from 'react-router-dom'
-import { employeesApi, clientsApi } from '../lib/api'
-import { Users, Plus, Search, Pencil, Trash2, X, Filter } from 'lucide-react'
-import { ConfirmModal } from '../components/ui/ConfirmModal'
-import { useToast } from '../hooks/useToast'
-import { ToastContainer } from '../components/ui/Toast'
+import { useState, useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
+import { employeesApi, clientsApi, salaryGridsApi } from '../lib/api'
+import { useAuth } from '../context/AuthContext'
+import { Loader2, Plus, Search, Edit2, Trash2, User, X } from 'lucide-react'
 
-interface Employee { id: string; first_name: string; last_name: string; matricule: string|null; position: string|null; category: string|null; marital_status: string; children_count: number; active: boolean; status: string; contract_type: string; client_id: string; client_name?: string; hire_date: string|null; gender: string }
-interface Client { id: string; name: string }
+const CONTRACT_TYPES = ['CDI','CDD','Intérim','Stage','Apprentissage']
+const STATUTS = ['actif','suspendu','retraité','décédé']
+const SITUATIONS = ['celibataire','marie','divorce','veuf']
+const CATEGORIES = ['Manœuvre','OS1','OS2','OS3','OP1','OP2','OP3','OHQ','Employé C1','Employé C2','Employé C3','Agent de Maîtrise','Cadre','Cadre Supérieur']
 
-const EMPTY_FORM = { first_name: '', last_name: '', matricule: '', position: '', category: '', marital_status: 'celibataire', children_count: 0, gender: 'M', status: 'actif', contract_type: 'cdi', hire_date: '', contract_end_date: '', phone: '', email: '', social_security_number: '', active: true, client_id: '' }
+const defaultForm = {
+  client_id:'',matricule:'',first_name:'',last_name:'',gender:'M',
+  birth_date:'',hire_date:'',position:'',category:'',
+  marital_status:'celibataire',children_count:0,
+  social_security_number:'',phone:'',email:'',
+  active:true,status:'actif',contract_type:'CDI',
+  contract_end_date:'',pole:'',responsable:'',
+}
 
 export default function Employees() {
-  const { toasts, toast, dismiss } = useToast()
-  const [employees, setEmployees] = useState<Employee[]>([])
-  const [clients, setClients] = useState<Client[]>([])
+  const { org } = useAuth()
+  const navigate = useNavigate()
+  const [employees, setEmployees] = useState<any[]>([])
+  const [clients, setClients] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [search, setSearch] = useState('')
   const [filterClient, setFilterClient] = useState('')
-  const [showForm, setShowForm] = useState(false)
-  const [editing, setEditing] = useState<Employee | null>(null)
-  const [deleting, setDeleting] = useState<Employee | null>(null)
-  const [form, setForm] = useState(EMPTY_FORM)
+  const [filterStatus, setFilterStatus] = useState('')
+  const [showModal, setShowModal] = useState(false)
+  const [editId, setEditId] = useState<string|null>(null)
+  const [form, setForm] = useState<any>(defaultForm)
+  const [saving, setSaving] = useState(false)
+  const [error, setError] = useState('')
+  const [deleteConfirm, setDeleteConfirm] = useState<string|null>(null)
+  const [gridSuggestion, setGridSuggestion] = useState<any>(null)
 
-  useEffect(() => { fetchData() }, [])
-
-  const fetchData = async () => {
+  const load = async () => {
+    setLoading(true)
     try {
       const [emps, cls] = await Promise.all([employeesApi.list(), clientsApi.list()])
       setEmployees(emps); setClients(cls)
     } catch {} finally { setLoading(false) }
   }
 
-  const openCreate = () => { setEditing(null); setForm({ ...EMPTY_FORM, client_id: clients[0]?.id || '' }); setShowForm(true) }
-  const openEdit = (e: Employee) => { setEditing(e); setForm({ first_name: e.first_name, last_name: e.last_name, matricule: e.matricule||'', position: e.position||'', category: e.category||'', marital_status: e.marital_status, children_count: e.children_count, gender: e.gender, status: e.status, contract_type: e.contract_type, hire_date: '', contract_end_date: '', phone: '', email: '', social_security_number: '', active: e.active, client_id: e.client_id }); setShowForm(true) }
+  useEffect(() => { load() }, [])
 
-  const handleSubmit = async (ev: React.FormEvent) => {
-    ev.preventDefault()
+  // Salary grid suggestion when category changes
+  useEffect(() => {
+    if (form.client_id && form.category) {
+      fetch(`/api/salary-grid-suggestion?client_id=${form.client_id}&category=${encodeURIComponent(form.category)}`, { credentials:'include' })
+        .then(r => r.ok ? r.json() : null)
+        .then(data => setGridSuggestion(data))
+        .catch(() => setGridSuggestion(null))
+    } else {
+      setGridSuggestion(null)
+    }
+  }, [form.client_id, form.category])
+
+  const openCreate = () => { setEditId(null); setForm(defaultForm); setError(''); setGridSuggestion(null); setShowModal(true) }
+  const openEdit   = (e: any) => { setEditId(e.id); setForm({...e}); setError(''); setShowModal(true) }
+
+  const handleSave = async () => {
+    if (!form.first_name || !form.last_name) return setError('Prénom et nom requis')
+    if (!form.client_id) return setError('Client requis')
+    setSaving(true); setError('')
     try {
-      if (editing) { await employeesApi.update(editing.id, form); toast('Employé mis à jour', 'success') }
-      else { await employeesApi.create(form); toast('Employé créé', 'success') }
-      setShowForm(false); fetchData()
-    } catch (err: any) { toast(err.message, 'error') }
+      if (editId) await employeesApi.update(editId, form)
+      else await employeesApi.create(form)
+      setShowModal(false); load()
+    } catch (e: any) { setError(e.message) } finally { setSaving(false) }
   }
 
-  const handleDelete = async () => {
-    if (!deleting) return
-    await employeesApi.delete(deleting.id)
-    setDeleting(null); toast('Employé supprimé', 'info'); fetchData()
+  const handleDelete = async (id: string) => {
+    try {
+      await employeesApi.delete(id)
+      setDeleteConfirm(null); load()
+    } catch (e: any) { alert(e.message) }
   }
 
   const filtered = employees.filter(e => {
     const q = search.toLowerCase()
-    const matchSearch = `${e.first_name} ${e.last_name}`.toLowerCase().includes(q) || (e.matricule||'').toLowerCase().includes(q)
+    const matchSearch = !q || `${e.first_name} ${e.last_name} ${e.matricule||''}`.toLowerCase().includes(q)
     const matchClient = !filterClient || e.client_id === filterClient
-    return matchSearch && matchClient
+    const matchStatus = !filterStatus || e.status === filterStatus
+    return matchSearch && matchClient && matchStatus
   })
 
-  if (loading) return <div className="flex items-center justify-center h-64"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div></div>
+  const inputCls = "w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white"
+  const labelCls = "block text-xs font-medium text-gray-600 dark:text-gray-400 mb-1"
 
   return (
-    <div className="space-y-6 page-enter">
-      <ToastContainer toasts={toasts} dismiss={dismiss} />
-      <ConfirmModal open={!!deleting} title="Supprimer cet employé" message={`Supprimer "${deleting?.first_name} ${deleting?.last_name}" ?`} confirmLabel="Supprimer" danger onConfirm={handleDelete} onCancel={() => setDeleting(null)} />
-      <div className="flex items-center justify-between flex-wrap gap-4">
-        <div><h1 className="text-2xl font-black text-slate-900">Employés</h1><p className="text-slate-500 mt-1">{employees.length} salarié{employees.length > 1 ? 's' : ''}</p></div>
-        <button onClick={openCreate} className="btn-primary" disabled={!clients.length}><Plus className="w-4 h-4" /> Nouvel employé</button>
-      </div>
-      <div className="flex gap-3 flex-wrap">
-        <div className="relative flex-1 min-w-48"><Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" /><input value={search} onChange={e => setSearch(e.target.value)} className="input pl-10" placeholder="Rechercher..." /></div>
-        <div className="relative min-w-48"><Filter className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
-          <select value={filterClient} onChange={e => setFilterClient(e.target.value)} className="input pl-10">
-            <option value="">Tous les clients</option>
-            {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-          </select>
+    <div className="p-6">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h1 className="text-2xl font-bold text-gray-800 dark:text-white">Employés</h1>
+          <p className="text-sm text-gray-500">{filtered.length} employé(s)</p>
         </div>
+        <button onClick={openCreate} className="btn-primary flex items-center gap-2">
+          <Plus className="w-4 h-4" /> Nouvel employé
+        </button>
       </div>
-      {filtered.length === 0 ? (
-        <div className="card p-12 text-center"><Users className="w-12 h-12 text-slate-200 mx-auto mb-3" /><p className="text-slate-500">Aucun employé.</p></div>
+
+      {/* Filtres */}
+      <div className="flex flex-wrap gap-3 mb-6">
+        <div className="relative flex-1 min-w-48">
+          <Search className="absolute left-3 top-2.5 w-4 h-4 text-gray-400" />
+          <input placeholder="Rechercher nom, matricule…" value={search} onChange={e=>setSearch(e.target.value)}
+            className="w-full pl-9 pr-3 py-2 border border-gray-300 rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 dark:bg-gray-700 dark:border-gray-600 dark:text-white" />
+        </div>
+        <select value={filterClient} onChange={e=>setFilterClient(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+          <option value="">Tous les clients</option>
+          {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
+        </select>
+        <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="border border-gray-300 rounded-lg px-3 py-2 text-sm dark:bg-gray-700 dark:border-gray-600 dark:text-white">
+          <option value="">Tous les statuts</option>
+          {STATUTS.map(s=><option key={s} value={s}>{s}</option>)}
+        </select>
+      </div>
+
+      {loading ? (
+        <div className="flex justify-center py-16"><Loader2 className="w-8 h-8 animate-spin text-blue-500" /></div>
+      ) : filtered.length === 0 ? (
+        <div className="text-center py-16 text-gray-400">
+          <User className="w-12 h-12 mx-auto mb-3 opacity-30" />
+          <p>Aucun employé trouvé</p>
+        </div>
       ) : (
-        <div className="card overflow-hidden">
-          <table className="w-full text-sm">
-            <thead><tr className="bg-slate-50 border-b border-slate-200">
-              <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase">Employé</th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase">Client</th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase">Poste</th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase">Situation</th>
-              <th className="text-left py-3 px-4 text-xs font-semibold text-slate-500 uppercase">Statut</th>
-              <th className="py-3 px-4"></th>
-            </tr></thead>
-            <tbody className="divide-y divide-slate-50">
-              {filtered.map(emp => (
-                <tr key={emp.id} className="hover:bg-slate-50 transition-colors">
-                  <td className="py-3 px-4">
-                    <Link to={`/employees/${emp.id}`} className="flex items-center gap-3 hover:text-primary-600 transition-colors">
-                      <div className="w-8 h-8 rounded-full bg-primary-100 flex items-center justify-center text-primary-700 text-xs font-medium flex-shrink-0">{emp.first_name[0]}{emp.last_name[0]}</div>
-                      <div><p className="font-medium text-slate-900">{emp.first_name} {emp.last_name}</p>{emp.matricule && <p className="text-xs text-slate-400">Mat. {emp.matricule}</p>}</div>
-                    </Link>
+        <div className="bg-white dark:bg-gray-800 rounded-2xl shadow overflow-hidden">
+          <table className="w-full">
+            <thead className="bg-gray-50 dark:bg-gray-700">
+              <tr>
+                {['Employé','Client','Poste','Catégorie','Statut',''].map(h=>(
+                  <th key={h} className="text-left px-4 py-3 text-xs font-semibold text-gray-500 uppercase">{h}</th>
+                ))}
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-gray-100 dark:divide-gray-700">
+              {filtered.map(e=>(
+                <tr key={e.id} className="hover:bg-gray-50 dark:hover:bg-gray-700/50 cursor-pointer" onClick={()=>navigate(`/employees/${e.id}`)}>
+                  <td className="px-4 py-3">
+                    <div className="font-medium text-gray-800 dark:text-white">{e.last_name} {e.first_name}</div>
+                    <div className="text-xs text-gray-400">{e.matricule||'—'}</div>
                   </td>
-                  <td className="py-3 px-4 text-slate-600">{emp.client_name}</td>
-                  <td className="py-3 px-4 text-slate-600">{emp.position||'—'}</td>
-                  <td className="py-3 px-4 text-slate-600 capitalize">{emp.marital_status} · {emp.children_count} enf.</td>
-                  <td className="py-3 px-4">{emp.active ? <span className="badge-success">Actif</span> : <span className="badge-error">Inactif</span>}</td>
-                  <td className="py-3 px-4">
+                  <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{e.client_name}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{e.position||'—'}</td>
+                  <td className="px-4 py-3 text-sm text-gray-600 dark:text-gray-300">{e.category||'—'}</td>
+                  <td className="px-4 py-3">
+                    <span className={`px-2 py-0.5 rounded-full text-xs font-medium ${e.status==='actif'?'bg-green-100 text-green-700':e.status==='suspendu'?'bg-yellow-100 text-yellow-700':'bg-gray-100 text-gray-600'}`}>
+                      {e.status}
+                    </span>
+                  </td>
+                  <td className="px-4 py-3" onClick={ev=>ev.stopPropagation()}>
                     <div className="flex gap-1">
-                      <button onClick={() => openEdit(emp)} className="p-1.5 rounded-lg hover:bg-slate-100 text-slate-400 hover:text-slate-700"><Pencil className="w-3.5 h-3.5" /></button>
-                      <button onClick={() => setDeleting(emp)} className="p-1.5 rounded-lg hover:bg-red-50 text-slate-400 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+                      <button onClick={()=>openEdit(e)} className="p-1.5 text-gray-400 hover:text-blue-600 hover:bg-blue-50 rounded"><Edit2 className="w-3.5 h-3.5"/></button>
+                      <button onClick={()=>setDeleteConfirm(e.id)} className="p-1.5 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded"><Trash2 className="w-3.5 h-3.5"/></button>
                     </div>
                   </td>
                 </tr>
@@ -115,72 +163,124 @@ export default function Employees() {
         </div>
       )}
 
-      {showForm && (
-        <div className="modal-overlay" onClick={() => setShowForm(false)}>
-          <div className="modal max-w-2xl" onClick={e => e.stopPropagation()}>
-            <div className="flex items-center justify-between px-6 py-4 border-b border-slate-100 sticky top-0 bg-white rounded-t-2xl">
-              <h2 className="font-bold text-slate-900">{editing ? 'Modifier l\'employé' : 'Nouvel employé'}</h2>
-              <button onClick={() => setShowForm(false)} className="p-1.5 rounded-xl hover:bg-slate-100"><X className="w-5 h-5 text-slate-400" /></button>
+      {/* Delete confirmation */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-sm w-full mx-4 shadow-xl">
+            <h3 className="font-bold text-gray-800 dark:text-white mb-2">Supprimer cet employé ?</h3>
+            <p className="text-sm text-gray-500 mb-4">Cette action est irréversible. Toutes les variables de paie associées seront supprimées.</p>
+            <div className="flex gap-3">
+              <button onClick={()=>setDeleteConfirm(null)} className="flex-1 btn-secondary">Annuler</button>
+              <button onClick={()=>handleDelete(deleteConfirm)} className="flex-1 bg-red-600 hover:bg-red-700 text-white font-semibold py-2 rounded-xl transition">Supprimer</button>
             </div>
-            <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[75vh] overflow-y-auto">
-              <div><label className="label">Client *</label>
-                <select required value={form.client_id} onChange={e => setForm({...form, client_id: e.target.value})} className="input">
-                  {clients.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
+          </div>
+        </div>
+      )}
+
+      {/* Modal Création/Édition */}
+      {showModal && (
+        <div className="fixed inset-0 bg-black/50 flex items-start justify-center z-50 overflow-y-auto py-8 px-4">
+          <div className="bg-white dark:bg-gray-800 rounded-2xl p-6 max-w-2xl w-full shadow-xl">
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-lg font-bold text-gray-800 dark:text-white">{editId?'Modifier':'Nouvel'} employé</h2>
+              <button onClick={()=>setShowModal(false)} className="text-gray-400 hover:text-gray-600"><X className="w-5 h-5"/></button>
+            </div>
+
+            {error && <div className="mb-4 text-sm text-red-600 bg-red-50 rounded-lg px-3 py-2">{error}</div>}
+
+            <div className="space-y-4">
+              {/* Client */}
+              <div>
+                <label className={labelCls}>Client *</label>
+                <select className={inputCls} value={form.client_id} onChange={e=>setForm({...form,client_id:e.target.value})}>
+                  <option value="">— Sélectionner —</option>
+                  {clients.map(c=><option key={c.id} value={c.id}>{c.name}</option>)}
                 </select>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="label">Prénom *</label><input required value={form.first_name} onChange={e => setForm({...form, first_name: e.target.value})} className="input" /></div>
-                <div><label className="label">Nom *</label><input required value={form.last_name} onChange={e => setForm({...form, last_name: e.target.value})} className="input" /></div>
+                <div><label className={labelCls}>Prénom *</label><input className={inputCls} value={form.first_name} onChange={e=>setForm({...form,first_name:e.target.value})} /></div>
+                <div><label className={labelCls}>Nom *</label><input className={inputCls} value={form.last_name} onChange={e=>setForm({...form,last_name:e.target.value})} /></div>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="label">Matricule</label><input value={form.matricule} onChange={e => setForm({...form, matricule: e.target.value})} className="input" /></div>
-                <div><label className="label">Genre</label>
-                  <select value={form.gender} onChange={e => setForm({...form, gender: e.target.value})} className="input">
+                <div><label className={labelCls}>Matricule</label><input className={inputCls} value={form.matricule||''} onChange={e=>setForm({...form,matricule:e.target.value})} /></div>
+                <div>
+                  <label className={labelCls}>Genre</label>
+                  <select className={inputCls} value={form.gender} onChange={e=>setForm({...form,gender:e.target.value})}>
                     <option value="M">Masculin</option><option value="F">Féminin</option>
                   </select>
                 </div>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="label">Poste</label><input value={form.position} onChange={e => setForm({...form, position: e.target.value})} className="input" /></div>
-                <div><label className="label">Catégorie</label><input value={form.category} onChange={e => setForm({...form, category: e.target.value})} className="input" /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="label">Pôle</label><input value={(form as any).pole||''} onChange={e => setForm({...form, pole: e.target.value} as any)} className="input" placeholder="Ex: ADMIN, RH, FINANCE" /></div>
-                <div><label className="label">Responsable</label><input value={(form as any).responsable||''} onChange={e => setForm({...form, responsable: e.target.value} as any)} className="input" placeholder="Nom du responsable" /></div>
-              </div>
-              <div className="grid grid-cols-2 gap-4">
-                <div><label className="label">Situation matrimoniale</label>
-                  <select value={form.marital_status} onChange={e => setForm({...form, marital_status: e.target.value})} className="input">
-                    <option value="celibataire">Célibataire</option>
-                    <option value="marie">Marié(e)</option>
-                    <option value="divorce">Divorcé(e)</option>
-                    <option value="veuf">Veuf/Veuve</option>
+                <div>
+                  <label className={labelCls}>Catégorie</label>
+                  <select className={inputCls} value={form.category||''} onChange={e=>setForm({...form,category:e.target.value})}>
+                    <option value="">— Sélectionner —</option>
+                    {CATEGORIES.map(c=><option key={c} value={c}>{c}</option>)}
                   </select>
                 </div>
-                <div><label className="label">Nb enfants</label><input type="number" min="0" value={form.children_count} onChange={e => setForm({...form, children_count: Number(e.target.value)})} className="input" /></div>
+                <div><label className={labelCls}>Poste/Fonction</label><input className={inputCls} value={form.position||''} onChange={e=>setForm({...form,position:e.target.value})} /></div>
               </div>
+
+              {/* Grid suggestion */}
+              {gridSuggestion && (
+                <div className="bg-blue-50 dark:bg-blue-900/20 rounded-lg p-3 text-sm text-blue-700 dark:text-blue-300">
+                  💡 Grille salariale trouvée : <strong>{gridSuggestion.base_salary?.toLocaleString('fr-FR')} FCFA</strong> pour {form.category}
+                </div>
+              )}
+
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="label">Type contrat</label>
-                  <select value={form.contract_type} onChange={e => setForm({...form, contract_type: e.target.value})} className="input">
-                    <option value="cdi">CDI</option><option value="cdd">CDD</option><option value="stage">Stage</option>
+                <div><label className={labelCls}>Pôle</label><input className={inputCls} placeholder="Ex: ADMIN, RH…" value={form.pole||''} onChange={e=>setForm({...form,pole:e.target.value})} /></div>
+                <div><label className={labelCls}>Responsable</label><input className={inputCls} placeholder="Nom du responsable" value={form.responsable||''} onChange={e=>setForm({...form,responsable:e.target.value})} /></div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className={labelCls}>Situation maritale</label>
+                  <select className={inputCls} value={form.marital_status} onChange={e=>setForm({...form,marital_status:e.target.value})}>
+                    {SITUATIONS.map(s=><option key={s} value={s}>{s}</option>)}
                   </select>
                 </div>
-                <div><label className="label">Date d'embauche</label><input type="date" value={form.hire_date} onChange={e => setForm({...form, hire_date: e.target.value})} className="input" /></div>
+                <div><label className={labelCls}>Enfants à charge</label><input type="number" min={0} className={inputCls} value={form.children_count} onChange={e=>setForm({...form,children_count:parseInt(e.target.value)||0})} /></div>
               </div>
+
               <div className="grid grid-cols-2 gap-4">
-                <div><label className="label">Téléphone</label><input value={form.phone} onChange={e => setForm({...form, phone: e.target.value})} className="input" /></div>
-                <div><label className="label">Email</label><input type="email" value={form.email} onChange={e => setForm({...form, email: e.target.value})} className="input" /></div>
+                <div>
+                  <label className={labelCls}>Type de contrat</label>
+                  <select className={inputCls} value={form.contract_type||'CDI'} onChange={e=>setForm({...form,contract_type:e.target.value})}>
+                    {CONTRACT_TYPES.map(t=><option key={t} value={t}>{t}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelCls}>Statut</label>
+                  <select className={inputCls} value={form.status||'actif'} onChange={e=>setForm({...form,status:e.target.value})}>
+                    {STATUTS.map(s=><option key={s} value={s}>{s}</option>)}
+                  </select>
+                </div>
               </div>
-              <div><label className="label">N° CNSS</label><input value={form.social_security_number} onChange={e => setForm({...form, social_security_number: e.target.value})} className="input" /></div>
-              <div className="flex items-center gap-3 p-3 bg-slate-50 rounded-xl">
-                <input type="checkbox" id="active" checked={form.active} onChange={e => setForm({...form, active: e.target.checked})} className="rounded" />
-                <label htmlFor="active" className="text-sm font-medium text-slate-700">Employé actif</label>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className={labelCls}>Date d'embauche</label><input type="date" className={inputCls} value={form.hire_date||''} onChange={e=>setForm({...form,hire_date:e.target.value})} /></div>
+                <div><label className={labelCls}>Date de naissance</label><input type="date" className={inputCls} value={form.birth_date||''} onChange={e=>setForm({...form,birth_date:e.target.value})} /></div>
               </div>
-              <div className="flex gap-3 pt-2">
-                <button type="button" onClick={() => setShowForm(false)} className="btn-secondary flex-1">Annuler</button>
-                <button type="submit" className="btn-primary flex-1">{editing ? 'Mettre à jour' : 'Créer'}</button>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div><label className={labelCls}>Téléphone</label><input className={inputCls} value={form.phone||''} onChange={e=>setForm({...form,phone:e.target.value})} /></div>
+                <div><label className={labelCls}>Email</label><input type="email" className={inputCls} value={form.email||''} onChange={e=>setForm({...form,email:e.target.value})} /></div>
               </div>
-            </form>
+
+              <div><label className={labelCls}>N° Sécurité Sociale</label><input className={inputCls} value={form.social_security_number||''} onChange={e=>setForm({...form,social_security_number:e.target.value})} /></div>
+            </div>
+
+            <div className="flex gap-3 mt-6">
+              <button onClick={()=>setShowModal(false)} className="flex-1 btn-secondary">Annuler</button>
+              <button onClick={handleSave} disabled={saving} className="flex-1 btn-primary flex items-center justify-center gap-2">
+                {saving&&<Loader2 className="w-4 h-4 animate-spin"/>}
+                {editId?'Mettre à jour':'Créer'}
+              </button>
+            </div>
           </div>
         </div>
       )}

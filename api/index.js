@@ -600,7 +600,8 @@ export default async function handler(req, res) {
     if (path === '/api/auth/me')         return authMe(req, res)
     if (path === '/api/auth/repair-org') return authRepairOrg(req, res)
     if (path === '/api/auth/signup-org') return authSignupOrg(req, res)
-    if (path === '/api/auth/debug')      return authDebug(req, res)
+    if (path === '/api/auth/reset-password') return authResetPassword(req, res)
+    // /api/auth/debug désactivé en production
 
     // ── Exports Excel ─────────────────────────────────────────────────────────
     if (path === '/api/export-bulletin') {
@@ -677,9 +678,51 @@ export default async function handler(req, res) {
         period_month: v.period_month,
         period_year: v.period_year,
       })
+      // Archive bulletin: sauvegarder dans Vercel Blob si disponible
+      try {
+        if (process.env.BLOB_READ_WRITE_TOKEN) {
+          const blobBuf = await wb2.xlsx.writeBuffer()
+          const { put: blobPut } = await import('@vercel/blob')
+          const blobResult = await blobPut(
+            `bulletins/${auth.orgId}/${period_id}/${employee_id}_${mois}_${v.period_year}.xlsx`,
+            blobBuf,
+            { access: 'public', token: process.env.BLOB_READ_WRITE_TOKEN }
+          )
+          // Mettre à jour bulletin_url dans payroll_variables
+          await db`UPDATE payroll_variables SET bulletin_url = ${blobResult.url} WHERE period_id = ${period_id} AND employee_id = ${employee_id}`
+        }
+      } catch (archiveErr) {
+        console.warn('[bulletin-archive]', archiveErr.message)
+      }
+      
+      // Regénérer le workbook pour le téléchargement (l'écriture précédente a consommé le stream)
+      const wb3 = new ExcelJS.Workbook()
+      genBulletin(wb3, `${(v.last_name||'').substring(0,3)} ${mois.substring(0,4)} ${v.period_year}`, {
+        nom: `${v.last_name} ${v.first_name}`,
+        n_assure: v.social_security_number || '',
+        nif_employe: v.client_nif || '',
+        nif: v.client_nif || '',
+        direction: v.category || '',
+        poste: v.position || '',
+        telephone: v.phone || '',
+        telephone_client: v.client_phone || '',
+        date_embauche: v.hire_date ? new Date(v.hire_date).toLocaleDateString('fr-FR') : '',
+        personnes_charge: pers,
+        rubriques,
+        avance_salaire: v.avance_salaire || 0,
+        irpp,
+        irpp_base,
+        logoBuffer,
+        client_name: v.client_name || '',
+        client_adresse: [v.bp, v.entite_name].filter(Boolean).join(' - '),
+        num_employeur: v.num_employeur || '',
+        mois_label: mois,
+        period_month: v.period_month,
+        period_year: v.period_year,
+      })
       res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
       res.setHeader('Content-Disposition', `attachment; filename="Bulletin_${v.last_name}_${mois}_${v.period_year}.xlsx"`)
-      await wb2.xlsx.write(res)
+      await wb3.xlsx.write(res)
       return res.end()
     }
 
@@ -730,6 +773,21 @@ export default async function handler(req, res) {
       res.setHeader('Content-Disposition', `attachment; filename="Etat_Charges_${mois}_${p.period_year}.xlsx"`)
       await wb2.xlsx.write(res)
       return res.end()
+    }
+
+    if (path === '/api/export-bordereau-cnss') {
+      if (method !== 'POST') return res.status(405).end()
+      return handleExportBordereau(req, res, 'cnss')
+    }
+
+    if (path === '/api/export-irpp') {
+      if (method !== 'POST') return res.status(405).end()
+      return handleExportBordereau(req, res, 'irpp')
+    }
+
+    if (path === '/api/salary-grid-suggestion') {
+      if (method !== 'GET') return res.status(405).end()
+      return handleGridSuggestion(req, res)
     }
 
     if (path === '/api/export-solde') {
@@ -785,6 +843,9 @@ export default async function handler(req, res) {
     const qpObj = new URL(req.url, 'http://x')
     qpObj.searchParams.delete('_path')
     const qp = Object.fromEntries(qpObj.searchParams)
+
+    // Vérification orgId sur toutes les routes CRUD
+    if (!auth.orgId) return res.status(403).json({ error: 'Aucune organisation liée à ce compte. Rechargez la page.' })
 
     // Clients
     if (path === '/api/clients') {
@@ -943,4 +1004,221 @@ export default async function handler(req, res) {
                   e.message?.includes('Session') || e.message?.includes('cookie')
     return res.status(is401 ? 401 : 500).json({ error: e.message })
   }
+}
+
+// ─── AUTH RESET PASSWORD ──────────────────────────────────────────────────────
+async function authResetPassword(req, res) {
+  // Proxy vers Neon Auth reset-password
+  try {
+    const r = await fetch(`${NEON_AUTH_BASE_URL}/forget-password`, {
+      method: 'POST',
+      headers: { 'origin': process.env.BETTER_AUTH_URL||'', 'content-type': 'application/json' },
+      body: JSON.stringify(req.body || {}),
+      signal: AbortSignal.timeout(8000),
+    })
+    const data = await r.json().catch(() => ({}))
+    return res.status(r.status).json(data)
+  } catch (e) {
+    return res.status(500).json({ error: e.message })
+  }
+}
+
+// ─── BORDEREAU CNSS ───────────────────────────────────────────────────────────
+function genBordereauCNSS(wb, sheetName, title, employes, mois, annee) {
+  const ws = wb.addWorksheet(sheetName)
+  ws.pageSetup.orientation = 'landscape'
+  ws.pageSetup.paperSize = 9
+
+  const col_widths = [6, 35, 15, 15, 15, 15, 15, 15, 15]
+  col_widths.forEach((w, i) => ws.getColumn(i+1).width = w)
+
+  // Titre
+  ws.mergeCells('A1:I1')
+  const t = ws.getCell('A1')
+  t.value = title
+  t.font = { name:'Calibri', size:14, bold:true }
+  t.alignment = { horizontal:'center', vertical:'center' }
+  ws.getRow(1).height = 24
+
+  // Sous-titre
+  ws.mergeCells('A2:I2')
+  ws.getCell('A2').value = `Période : ${mois} ${annee}`
+  ws.getCell('A2').font = { name:'Calibri', size:11, bold:true }
+  ws.getCell('A2').alignment = { horizontal:'center' }
+
+  // En-têtes
+  const headers = ['N°', 'Nom et Prénoms', 'N° Assuré', 'Salaire Brut', 'CNSS Salarié 4%', 'CNSS Patronale 17,5%', 'AMU Salarié 5%', 'AMU Patronale 5%', 'TOTAL CNSS+AMU']
+  const hFill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF1F3864'} }
+  for (let ci=1; ci<=9; ci++) {
+    const c = ws.getRow(4).getCell(ci)
+    c.value = headers[ci-1]
+    c.font = { name:'Calibri', size:10, bold:true, color:{argb:'FFFFFFFF'} }
+    c.alignment = { horizontal:'center', vertical:'center', wrapText:true }
+    c.fill = hFill
+    c.border = { left:{style:'thin'}, right:{style:'thin'}, top:{style:'thin'}, bottom:{style:'thin'} }
+  }
+  ws.getRow(4).height = 35
+
+  // Données
+  for (let i=0; i<employes.length; i++) {
+    const r = i+5; const emp = employes[i]
+    const brut = emp.brut
+    const cnss_s = Math.round(brut * 0.04)
+    const cnss_p = Math.round(brut * 0.175)
+    const amu_s  = Math.round(brut * 0.05)
+    const amu_p  = Math.round(brut * 0.05)
+    const total  = cnss_s + cnss_p + amu_s + amu_p
+
+    const vals = [i+1, emp.nom, emp.n_assure||'', brut, cnss_s, cnss_p, amu_s, amu_p, total]
+    for (let ci=1; ci<=9; ci++) {
+      const c = ws.getRow(r).getCell(ci)
+      c.value = vals[ci-1]
+      c.font = { name:'Calibri', size:10 }
+      c.border = { left:{style:'thin'}, right:{style:'thin'}, top:{style:'thin'}, bottom:{style:'thin'} }
+      if (ci >= 4) c.numFmt = '#,##0'
+    }
+  }
+
+  // Total
+  const tr = employes.length + 5
+  ws.getRow(tr).getCell(2).value = 'TOTAL'
+  ws.getRow(tr).getCell(2).font = { name:'Calibri', size:11, bold:true }
+  for (let ci=4; ci<=9; ci++) {
+    const lc = String.fromCharCode(64+ci)
+    const c = ws.getRow(tr).getCell(ci)
+    c.value = { formula: `SUM(${lc}5:${lc}${tr-1})` }
+    c.font = { name:'Calibri', size:11, bold:true }
+    c.numFmt = '#,##0'
+    c.border = { left:{style:'thin'}, right:{style:'thin'}, top:{style:'medium'}, bottom:{style:'medium'} }
+  }
+}
+
+// ─── BORDEREAU AMU ────────────────────────────────────────────────────────────
+function genBordereauAMU(wb, sheetName, title, employes, mois, annee) {
+  // Même structure que CNSS mais focusé AMU
+  genBordereauCNSS(wb, sheetName, title, employes, mois, annee)
+}
+
+// ─── DÉCLARATION IRPP TRIMESTRIELLE ───────────────────────────────────────────
+function genDeclarationIRPP(wb, sheetName, title, employes, trimestre, annee) {
+  const ws = wb.addWorksheet(sheetName)
+  ws.pageSetup.orientation = 'landscape'
+  ws.pageSetup.paperSize = 9
+
+  ws.getColumn(1).width = 6
+  ws.getColumn(2).width = 35
+  ws.getColumn(3).width = 18
+  ws.getColumn(4).width = 18
+  ws.getColumn(5).width = 18
+  ws.getColumn(6).width = 18
+
+  ws.mergeCells('A1:F1')
+  const t = ws.getCell('A1')
+  t.value = title
+  t.font = { name:'Calibri', size:14, bold:true }
+  t.alignment = { horizontal:'center' }
+  ws.getRow(1).height = 24
+
+  ws.mergeCells('A2:F2')
+  ws.getCell('A2').value = `Trimestre ${trimestre} - ${annee}`
+  ws.getCell('A2').font = { name:'Calibri', size:11, bold:true }
+  ws.getCell('A2').alignment = { horizontal:'center' }
+
+  const headers = ['N°', 'Nom et Prénoms', 'Revenu brut imposable', 'IRPP calculé', 'Régularisation', 'IRPP à verser']
+  const hFill = { type:'pattern', pattern:'solid', fgColor:{argb:'FF1F3864'} }
+  for (let ci=1; ci<=6; ci++) {
+    const c = ws.getRow(4).getCell(ci)
+    c.value = headers[ci-1]
+    c.font = { name:'Calibri', size:10, bold:true, color:{argb:'FFFFFFFF'} }
+    c.alignment = { horizontal:'center', vertical:'center', wrapText:true }
+    c.fill = hFill
+    c.border = { left:{style:'thin'}, right:{style:'thin'}, top:{style:'thin'}, bottom:{style:'thin'} }
+  }
+  ws.getRow(4).height = 35
+
+  for (let i=0; i<employes.length; i++) {
+    const r = i+5; const emp = employes[i]
+    const vals = [i+1, emp.nom, emp.brut_imposable||0, emp.irpp||0, emp.regularisation||0, (emp.irpp||0)+(emp.regularisation||0)]
+    for (let ci=1; ci<=6; ci++) {
+      const c = ws.getRow(r).getCell(ci)
+      c.value = vals[ci-1]
+      c.font = { name:'Calibri', size:10 }
+      c.border = { left:{style:'thin'}, right:{style:'thin'}, top:{style:'thin'}, bottom:{style:'thin'} }
+      if (ci >= 3) c.numFmt = '#,##0'
+    }
+  }
+
+  const tr = employes.length + 5
+  ws.getRow(tr).getCell(2).value = 'TOTAL'
+  ws.getRow(tr).getCell(2).font = { name:'Calibri', size:11, bold:true }
+  for (let ci=3; ci<=6; ci++) {
+    const lc = String.fromCharCode(64+ci)
+    const c = ws.getRow(tr).getCell(ci)
+    c.value = { formula: `SUM(${lc}5:${lc}${tr-1})` }
+    c.font = { name:'Calibri', size:11, bold:true }
+    c.numFmt = '#,##0'
+    c.border = { left:{style:'thin'}, right:{style:'thin'}, top:{style:'medium'}, bottom:{style:'medium'} }
+  }
+}
+
+// ─── ROUTES EXPORT BORDEREAU + IRPP ──────────────────────────────────────────
+async function handleExportBordereau(req, res, type) {
+  await requireAuth(req)
+  const { period_id } = req.body
+  if (!period_id) return res.status(400).json({ error: 'period_id requis' })
+  const db = neon(DB_URL())
+  const rows = await db`
+    SELECT pv.*, e.first_name, e.last_name, e.social_security_number,
+           e.children_count, e.marital_status,
+           c.name as client_name, pp.period_month, pp.period_year
+    FROM payroll_variables pv
+    JOIN employees e ON e.id = pv.employee_id
+    JOIN payroll_periods pp ON pp.id = pv.period_id
+    JOIN clients c ON c.id = pp.client_id
+    WHERE pv.period_id = ${period_id}
+    ORDER BY e.last_name
+  `
+  if (!rows.length) return res.status(404).json({ error: 'Aucune variable de paie pour cette période.' })
+  const p = rows[0]
+  const MOIS = ['JANVIER','FEVRIER','MARS','AVRIL','MAI','JUIN','JUILLET','AOUT','SEPTEMBRE','OCTOBRE','NOVEMBRE','DECEMBRE']
+  const mois = MOIS[(p.period_month||1)-1]
+  const annee = p.period_year || ''
+  const employes = rows.map(v => ({
+    nom: `${v.last_name} ${v.first_name}`,
+    n_assure: v.social_security_number || '',
+    brut: calcBrut(v),
+    brut_imposable: calcBrut(v),
+    irpp: calcIrppMensuel(calcBrut(v), calcPersonnesCharge(v.marital_status, v.children_count)),
+    regularisation: v.regularisation_irpp || 0,
+  }))
+
+  const wb2 = new ExcelJS.Workbook()
+  let filename = ''
+  if (type === 'cnss') {
+    genBordereauCNSS(wb2, `CNSS ${mois} ${annee}`, `${p.client_name} : BORDEREAU CNSS/AMU - ${mois} ${annee}`, employes, mois, annee)
+    filename = `Bordereau_CNSS_${mois}_${annee}.xlsx`
+  } else if (type === 'irpp') {
+    const trimestre = Math.ceil((p.period_month||1) / 3)
+    genDeclarationIRPP(wb2, `IRPP T${trimestre} ${annee}`, `${p.client_name} : DÉCLARATION IRPP TRIMESTRIELLE T${trimestre} ${annee}`, employes, trimestre, annee)
+    filename = `IRPP_T${trimestre}_${annee}.xlsx`
+  }
+
+  res.setHeader('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet')
+  res.setHeader('Content-Disposition', `attachment; filename="${filename}"`)
+  await wb2.xlsx.write(res)
+  return res.end()
+}
+
+// ─── SALARY GRID SUGGESTION ───────────────────────────────────────────────────
+async function handleGridSuggestion(req, res) {
+  await requireAuth(req)
+  const { client_id, category } = req.query || {}
+  if (!client_id || !category) return res.status(400).json({ error: 'client_id et category requis' })
+  const db = neon(DB_URL())
+  const rows = await db`
+    SELECT * FROM salary_grids
+    WHERE client_id = ${client_id} AND LOWER(category) = LOWER(${category})
+    ORDER BY echelon DESC LIMIT 1
+  `
+  return res.status(200).json(rows[0] || null)
 }
