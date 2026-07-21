@@ -192,12 +192,7 @@ function genBulletin(wb, sheetName, data) {
       else if (b[0] === 0x47 && b[1] === 0x49) extension = 'gif'
       if (extension !== 'gif') {
         const imgId = wb.addImage({ buffer: data.logoBuffer, extension })
-        // Deux cellules anchor comme l'original: col 0-1, row 0-9
-        ws.addImage(imgId, {
-          tl: { col: 0, row: 0, nativeColOff: 9525, nativeRowOff: 123826 },
-          br: { col: 1, row: 9, nativeColOff: 1628775, nativeRowOff: 152400 },
-          editAs: 'oneCell'
-        })
+        ws.addImage(imgId, { tl: { col: 0, row: 0 }, br: { col: 2, row: 9 } })
       }
     } catch {}
   }
@@ -213,12 +208,18 @@ function genBulletin(wb, sheetName, data) {
   // Période - box blanc (col C-F, rows 6-9)
   const m = data.mois_label || ''
   const annee = data.period_year || ''
-  const moisNum = String(data.period_month||1).padStart(2,'0')
+  const moisNum = String(Number(data.period_month)||1).padStart(2,'0')
   ws.mergeCells('C6:F9')
   const perCell = ws.getCell('C6')
-  perCell.value = `MOIS DE: ${m}\nPERIODE DU:  01/${moisNum}/${annee}              \n                   AU:  ${new Date(annee,data.period_month||1,0).getDate()}/${moisNum}/${annee}`
+  const lastDay = annee && data.period_month ? new Date(Number(annee), Number(data.period_month), 0).getDate() : 30
+  perCell.value = {
+    richText: [
+      { font:{ name:'Calibri', size:12, bold:true }, text:`MOIS DE: ${m}` },
+      { font:{ name:'Calibri', size:12, bold:true }, text:`\nPERIODE DU:  01/${moisNum}/${annee}` },
+      { font:{ name:'Calibri', size:12, bold:true }, text:`\n                   AU:  ${lastDay}/${moisNum}/${annee}` },
+    ]
+  }
   perCell.alignment = { horizontal:'left', vertical:'top', wrapText:true }
-  perCell.font = { name:'Calibri', size:12, bold:true }
   perCell.fill = { type:'pattern', pattern:'solid', fgColor:{argb:'FFF2F2F2'} }
   perCell.border = { left:thin(), right:thin(), top:thin(), bottom:thin() }
 
